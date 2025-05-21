@@ -1,23 +1,38 @@
 # syntax=docker/dockerfile:1
 # escape=\
-
-FROM postgres@sha256:7b86711ac72674c8f2cf0fad7fd55cb07ae709c62fa0cddfa78e28e985fffe09
+FROM alpine@sha256:eddacbc7e24bf8799a4ed3cdcfa50d4b88a323695ad80f317b6629883b2c2a78
 
 RUN apk update \
 	&& apk upgrade \
-	&& apk add vim curl
-
-COPY --chown=postgres:postgres ./conf/pg_hba.conf /etc/postgresql/pg_hba.conf
-COPY --chown=postgres:postgres ./conf/postgresql.conf /etc/postgresql/postgresql.conf
+	&& apk add postgresql vim curl jq
 
 RUN mkdir /etc/postgresql/live_chat_postgres
 
-RUN chmod 600 /etc/postgresql/pg_hba.conf /etc/postgresql/postgresql.conf
+RUN mkdir /run/postgresql \
+	&& chown postgres:postgres /run/postgresql \
+	&& mkdir /var/lib/postgresql/data \
+	&& chown postgres:postgres /var/lib/postgresql/data \
+	&& chmod 0700 /var/lib/postgresql/data
 
-COPY --chown=root:root ./tools/01_replicat_init.sh /docker-entrypoint-initdb.d/01_replicat_init.sh
-RUN chmod +x /docker-entrypoint-initdb.d/01_replicat_init.sh
+COPY --chown=postgres:postgres ./tools/00_script.sh /var/lib/postgresql/script.sh
+RUN chmod +x /var/lib/postgresql/script.sh
 
-COPY --chown=root:root ./tools/02_replicat_init.sh /home/init/02_replicat_init.sh
-RUN chmod +x /home/init/02_replicat_init.sh
+USER postgres
 
-CMD ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
+RUN initdb -D /var/lib/postgresql/data
+
+COPY --chown=postgres:postgres ./conf/pg_hba.conf /var/lib/postgresql/data/pg_hba.conf
+COPY --chown=postgres:postgres ./conf/postgresql.conf /var/lib/postgresql/data/postgresql.conf
+
+RUN chmod 700 /var/lib/postgresql/data/pg_hba.conf /var/lib/postgresql/data/postgresql.conf
+
+RUN sh /var/lib/postgresql/script.sh
+
+USER root
+
+COPY --chown=root:root ./tools/01_replicat_init.sh /home/init/01_replicat_init.sh
+RUN chmod +x /home/init/01_replicat_init.sh
+
+USER postgres
+
+CMD ["postgres", "-D", "/var/lib/postgresql/data"]

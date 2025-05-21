@@ -10,10 +10,10 @@ all:
 
 	@docker compose -f ./srcs/docker-compose.yml up -d > /dev/null
 
+	@docker exec service_user_handler_postgresql sh /home/init/01_replicat_init.sh > /dev/null
+	@docker exec service_game_pong_postgresql sh /home/init/01_replicat_init.sh > /dev/null
+	@docker exec service_live_chat_postgresql sh /home/init/01_replicat_init.sh > /dev/null
 	@docker exec service_user_handler_postgresql sh /home/init/02_replicat_init.sh > /dev/null
-	@docker exec service_game_pong_postgresql sh /home/init/02_replicat_init.sh > /dev/null
-	@docker exec service_live_chat_postgresql sh /home/init/02_replicat_init.sh > /dev/null
-	@docker exec service_user_handler_postgresql sh /home/init/03_replicat_init.sh > /dev/null
 
 clean:
 

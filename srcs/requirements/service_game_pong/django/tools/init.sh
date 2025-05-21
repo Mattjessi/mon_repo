@@ -19,4 +19,5 @@ source /django_web_app/.env/bin/activate \
 	&& python3 manage.py makemigrations core --no-input \
 	&& python3 manage.py migrate --fake-initial --no-input \
 	&& python3 manage.py collectstatic --no-input \
+	&& python3 /django_web_app/utils/create_superuser.py \
 	&& daphne -b 0.0.0.0 -p 8000 django_game_pong.asgi:application

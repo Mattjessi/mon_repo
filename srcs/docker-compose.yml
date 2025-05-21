@@ -69,8 +69,6 @@ services:
       network:
         ipv4_address: 172.20.0.41
     hostname: service_user_handler_postgresql
-    env_file:
-      - ./env/.env_service_user_handler_postgres
     volumes:
       - secrets_user_handler_postgres:/etc/postgresql/user_handler_postgres
 
@@ -105,8 +103,6 @@ services:
       network:
         ipv4_address: 172.20.0.43
     hostname: service_game_pong_postgresql
-    env_file:
-      - ./env/.env_service_game_pong_postgres
     volumes:
       - secrets_game_pong_postgres:/etc/postgresql/game_pong_postgres
 
@@ -141,8 +137,6 @@ services:
       network:
         ipv4_address: 172.20.0.45
     hostname: service_live_chat_postgresql
-    env_file:
-      - ./env/.env_service_live_chat_postgres
     volumes:
       - secrets_live_chat_postgres:/etc/postgresql/live_chat_postgres
 
