@@ -14,8 +14,8 @@ RUN mkdir /run/postgresql \
 	&& chown postgres:postgres /var/lib/postgresql/data \
 	&& chmod 0700 /var/lib/postgresql/data
 
-COPY --chown=postgres:postgres ./tools/00_script.sh /var/lib/postgresql/script.sh
-RUN chmod +x /var/lib/postgresql/script.sh
+COPY --chown=postgres:postgres ./tools/00_replicat_init.sh /var/lib/postgresql/00_replicat_init.sh
+RUN chmod +x /var/lib/postgresql/00_replicat_init.sh
 
 USER postgres
 
