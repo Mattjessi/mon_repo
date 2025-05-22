@@ -8,6 +8,12 @@ all:
 
 	@sh -c "./srcs/requirements/hashicorp_vault/vault/tools/init.sh"
 
+	@docker compose -f ./srcs/docker-compose.yml up -d service_user_handler_postgresql > /dev/null
+
+	@docker compose -f ./srcs/docker-compose.yml up -d service_game_pong_postgresql > /dev/null
+
+	@docker compose -f ./srcs/docker-compose.yml up -d service_live_chat_postgresql > /dev/null
+
 	@docker compose -f ./srcs/docker-compose.yml up -d > /dev/null
 
 	@docker exec service_user_handler_postgresql sh /home/init/01_replicat_init.sh > /dev/null

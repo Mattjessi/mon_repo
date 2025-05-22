@@ -26,9 +26,10 @@ COPY --chown=postgres:postgres ./conf/postgresql.conf /var/lib/postgresql/data/p
 
 RUN chmod 700 /var/lib/postgresql/data/pg_hba.conf /var/lib/postgresql/data/postgresql.conf
 
-RUN sh /var/lib/postgresql/script.sh
-
 USER root
+
+COPY --chown=postgres:postgres ./tools/init.sh /home/init/init.sh
+RUN chmod +x /home/init/init.sh
 
 COPY --chown=root:root ./tools/01_replicat_init.sh /home/init/01_replicat_init.sh
 RUN chmod +x /home/init/01_replicat_init.sh
@@ -38,4 +39,4 @@ RUN chmod +x /home/init/02_replicat_init.sh
 
 USER postgres
 
-CMD ["postgres", "-D", "/var/lib/postgresql/data"]
+CMD ["/home/init/init.sh"]
