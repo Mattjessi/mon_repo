@@ -29,6 +29,9 @@ services:
     build:
       context: ./requirements/frontend
       dockerfile: Dockerfile
+      args:
+        VITE_DOMAIN_NAME: 'localhost'
+        VITE_PORT_NUM: 4343
     container_name: frontend
     init: true
     restart: always
@@ -47,6 +50,7 @@ services:
     container_name: service_user_handler_django
     env_file:
       - ./env/.env_nginx
+      - ./env/.env_service_user_handler_django
     init: true
     restart: always
     networks:
@@ -71,6 +75,7 @@ services:
     hostname: service_user_handler_postgresql
     volumes:
       - secrets_user_handler_postgres:/etc/postgresql/user_handler_postgres
+      - secrets_game_pong_postgres:/etc/postgresql/game_pong_postgres
 
   service_game_pong_django:
     depends_on:
@@ -82,6 +87,7 @@ services:
     container_name: service_game_pong_django
     env_file:
       - ./env/.env_nginx
+      - ./env/.env_service_game_pong_django
     init: true
     restart: always
     networks:
@@ -105,6 +111,7 @@ services:
     hostname: service_game_pong_postgresql
     volumes:
       - secrets_game_pong_postgres:/etc/postgresql/game_pong_postgres
+      - secrets_user_handler_postgres:/etc/postgresql/user_handler_postgres
 
   service_live_chat_django:
     depends_on:
@@ -116,6 +123,7 @@ services:
     container_name: service_live_chat_django
     env_file:
       - ./env/.env_nginx
+      - ./env/.env_service_live_chat_django
     init: true
     restart: always
     networks:
@@ -138,11 +146,11 @@ services:
         ipv4_address: 172.20.0.45
     hostname: service_live_chat_postgresql
     volumes:
+      - secrets_user_handler_postgres:/etc/postgresql/user_handler_postgres
       - secrets_live_chat_postgres:/etc/postgresql/live_chat_postgres
+      - secrets_game_pong_postgres:/etc/postgresql/game_pong_postgres
 
   vault:
-    depends_on:
-      - vault_postgresql
     build:
       context: ./requirements/hashicorp_vault/vault
       dockerfile: Dockerfile
@@ -165,20 +173,6 @@ services:
       - secrets_game_pong_postgres:/vault/clients_tokens/game_pong_postgres
       - secrets_live_chat_django:/vault/clients_tokens/live_chat_django
       - secrets_live_chat_postgres:/vault/clients_tokens/live_chat_postgres
-
-  vault_postgresql:
-    build:
-      context: ./requirements/hashicorp_vault/postgresql
-      dockerfile: Dockerfile
-    container_name: vault_postgresql
-    init: true
-    restart: always
-    networks:
-      network:
-        ipv4_address: 172.20.0.10
-    hostname: vault_postgresql
-    env_file:
-      - ./env/.env_vault_postgres
 
 networks:
   network:

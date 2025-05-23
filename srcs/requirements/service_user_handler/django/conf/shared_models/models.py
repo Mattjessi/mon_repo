@@ -26,13 +26,19 @@ class Player(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='player_profile', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    forty_two_id = models.CharField(max_length=50, unique=True, null=True, blank=True)
     name = models.CharField(max_length=255)
-    victory = models.PositiveIntegerField(default=0)
-    defeat = models.PositiveIntegerField(default=0)
     online = models.BooleanField(default=False)
     last_seen = models.DateTimeField(null=True, blank=True)
     description = models.TextField(max_length=500, blank=True, default="")
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True, default='avatars/default.jpg')
+    two_factor_enabled = models.BooleanField(default=False)
+    two_factor_method = models.CharField(
+        max_length=10,
+        choices=[('TOTP', 'TOTP')],
+        default='TOTP',
+        blank=True
+    ) 
 
     friends = models.ManyToManyField('self', symmetrical=False, through='Friendship', related_name='friends_of')
 
@@ -91,7 +97,7 @@ class Tournament(models.Model):
 
 class Match(models.Model):
     tournament = models.ForeignKey(Tournament, on_delete=models.CASCADE, related_name='tournament', null=True, blank=True)
-    match_number= models.PositiveIntegerField(null=True, blank=True) #final = 1, demi-final=2
+    match_number= models.PositiveIntegerField(default=0, null=True, blank=True) #final = 1, demi-final=2
     player_1 = models.ForeignKey(Player, on_delete=models.SET_NULL, related_name='matches_as_player_1', null=True)
     player_2 = models.ForeignKey(Player, on_delete=models.SET_NULL, related_name='matches_as_player_2', null=True)
     status = models.CharField(choices=StatusChoices.choices, max_length=10, default=StatusChoices.EN_COURS)

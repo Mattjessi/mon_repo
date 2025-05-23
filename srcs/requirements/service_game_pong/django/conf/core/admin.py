@@ -1,6 +1,6 @@
 from django.contrib import admin
 from shared_models.models import Player, Friendship, Block, Match, Tournament
-from .models import Invitation, Game
+from .models import Invitation, Game, Winrate
 
 
 class PlayerAdmin(admin.ModelAdmin):
@@ -28,6 +28,12 @@ class GameAdmin(admin.ModelAdmin):
 @admin.register(Tournament)
 class TournamentAdmin(admin.ModelAdmin):
     list_display = ['id', 'name','player_1', 'player_2', 'player_3', 'player_4', 'status', 'created_at', 'updated_at']
+
+@admin.register(Winrate)
+class WinrateAdmin(admin.ModelAdmin):
+    list_display = ['id', 'player', 'victory', 'defeat']
+    search_fields = ['player__name']  # Permet de rechercher par nom de joueur
+    list_filter = ['player']  # Ajoute un filtre par joueur
 
 admin.site.register(Player, PlayerAdmin)
 admin.site.register(Friendship)

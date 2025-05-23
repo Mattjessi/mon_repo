@@ -1,6 +1,8 @@
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
-from shared_models.models import Match, Tournament, TournamentStatusChoices, StatusChoices
+from shared_models.models import Match,TournamentStatusChoices, StatusChoices
+from .models import Winrate
+from django.db import transaction
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
@@ -15,7 +17,6 @@ def handle_final_match_completion(sender, instance, **kwargs):
         # Vérifier si le match est une finale terminée avec un gagnant
         if instance.match_number == 1 and instance.status == StatusChoices.TERMINE and instance.winner:
             tournament = instance.tournament
-            print(tournament)
             # Vérifier que le tournoi est en cours
             if tournament.status == TournamentStatusChoices.EN_COURS:
                 # Mettre à jour le tournoi
@@ -46,3 +47,39 @@ def handle_final_match_completion(sender, instance, **kwargs):
                     )
     except Exception as e:
         print(f"Erreur dans handle_final_match_completion pour match {instance.id}: {str(e)}")
+
+
+@receiver(pre_save, sender=Match)
+def update_winrate_player(sender, instance, **kwargs):
+    """Signal déclenché avant que le match soit sauvegardé."""
+    try:
+        # Vérifier si c'est une mise à jour (pas une création)
+        if not instance.pk:
+            return
+            
+        # Récupérer l'état précédent du match
+        try:
+            old_instance = Match.objects.get(pk=instance.pk)
+        except Match.DoesNotExist:
+            return
+            
+        if (old_instance.status != StatusChoices.TERMINE and 
+            instance.status == StatusChoices.TERMINE and 
+            instance.winner):
+            
+            winrate_1, _ = Winrate.objects.get_or_create(player=instance.player_1)
+            winrate_2, _ = Winrate.objects.get_or_create(player=instance.player_2)
+            
+            if instance.winner == instance.player_1:
+                winrate_1.victory += 1
+                winrate_2.defeat += 1
+            elif instance.winner == instance.player_2:
+                winrate_2.victory += 1
+                winrate_1.defeat += 1
+
+            winrate_1.save()
+            winrate_2.save()
+            
+            
+    except Exception as e:
+        print(f"Erreur dans update_winrate_player pour match {instance.id}: {str(e)}")

@@ -3,12 +3,13 @@ from .models import PrivateMessage, GeneralMessage
 from shared_models.models import Player, Block, Friendship
 
 class GeneralMessageSerializer(serializers.ModelSerializer):
-    sender = serializers.CharField(source='sender.id', read_only=True)  # Affiche l'ID du Player
+    sender = serializers.CharField(source='sender.id', read_only=True) 
+    sender_name = serializers.CharField(source='sender.name', read_only=True)
 
     class Meta:
         model = GeneralMessage
-        fields = ['id', 'content', 'timestamp', 'sender']
-        read_only_fields = ['id', 'timestamp', 'sender']
+        fields = ['id', 'content', 'timestamp', 'sender', 'sender_name']
+        read_only_fields = ['id', 'timestamp', 'sender', 'sender_name']
 
     def validate(self, data):
         # Récupérer l'utilisateur authentifié (sender)
@@ -26,13 +27,15 @@ class GeneralMessageSerializer(serializers.ModelSerializer):
 
 
 class PrivateMessageSerializer(serializers.ModelSerializer):
-    sender = serializers.CharField(source='sender.id', read_only=True)  # Affiche l'ID du Player
-    receiver = serializers.CharField(source='receiver.id', read_only=True)  # Affiche l'ID du Player
+    sender = serializers.CharField(source='sender.id', read_only=True) 
+    sender_name = serializers.CharField(source='sender.name', read_only=True)
+    receiver = serializers.CharField(source='receiver.id', read_only=True) 
+    receiver_name = serializers.CharField(source='receiver.name', read_only=True)
 
     class Meta:
         model = PrivateMessage
-        fields = ['id', 'content', 'timestamp', 'sender', 'receiver']
-        read_only_fields = ['id', 'timestamp', 'sender', 'receiver']
+        fields = ['id', 'content', 'timestamp', 'sender', 'receiver', 'sender_name', 'receiver_name']
+        read_only_fields = ['id', 'timestamp', 'sender', 'receiver', 'sender_name', 'receiver_namee']
 
     def validate(self, data):
         # Récupérer l'utilisateur authentifié (sender)

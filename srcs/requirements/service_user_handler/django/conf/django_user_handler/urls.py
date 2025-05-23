@@ -28,5 +28,6 @@ urlpatterns = [
     path('users/api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('users/api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('users/api-token-auth/', obtain_auth_token),
+    path('users/social/', include('social_django.urls', namespace='social')),
 ]
 

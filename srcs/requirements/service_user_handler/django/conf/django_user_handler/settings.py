@@ -26,13 +26,14 @@ vault_secrets = get_vault_secrets()
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = vault_secrets['django_secret_key']
+DOMAIN_NAME = os.getenv('DOMAIN_NAME', 'localhost')
+PORT_NUM = os.getenv('PORT_NUM', '4343')
+SOCIAL_AUTH_42_KEY = os.getenv('AUTH_42_KEY')
+SOCIAL_AUTH_42_SECRET = os.getenv('AUTH_42_SECRET')
+SOCIAL_AUTH_REDIRECT_URI = f"https://{DOMAIN_NAME}:{PORT_NUM}/users/api/auth-42/callback/"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = ['localhost']
-
-
+DEBUG = False
 
 # Application definition
 
@@ -49,6 +50,9 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
+    'django_otp',
+    'django_otp.plugins.otp_totp',
+    'social_django',
 
     # App locale
     'core',
@@ -65,6 +69,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.middleware.UserActivityMiddleware',
+    'core.middleware.SetUserOnlineMiddleware',
 ]
 
 ROOT_URLCONF = 'django_user_handler.urls'
@@ -85,21 +91,40 @@ TEMPLATES = [
     },
 ]
 
+AUTHENTICATION_BACKENDS = (
+    'django.contrib.auth.backends.ModelBackend',
+)
+
 WSGI_APPLICATION = 'django_user_handler.wsgi.application'
 
 CORS_ALLOWED_ORIGINS = [
-    'https://localhost:4343', # Adresse de ton frontend
+    f"https://{DOMAIN_NAME}:{PORT_NUM}",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    'https://localhost:4343',
-    'https://localhost',
+    f"https://{DOMAIN_NAME}:{PORT_NUM}",
+    f"https://{DOMAIN_NAME}",
 ]
 
-ALLOWED_HOSTS = ['localhost']
+ALLOWED_HOSTS = [DOMAIN_NAME]
+
+MEDIA_URL = f"https://{DOMAIN_NAME}:{PORT_NUM}/media/"
+MEDIA_ROOT = BASE_DIR / 'media'
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = False  # À désactiver en production
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-requested-with',
+]
+
+# Autoriser les méthodes HTTP
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',
@@ -111,13 +136,11 @@ CORS_ALLOW_METHODS = [
 
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.BasicAuthentication',   
+    'DEFAULT_AUTHENTICATION_CLASSES': [ 
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated', #a changer en prod
+        'rest_framework.permissions.IsAuthenticated',
     ],
     'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
 }
@@ -187,11 +210,14 @@ LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/users/admin/'
 LOGIN_URL = '/login'
 
-MEDIA_URL = 'https://localhost:4343/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
-
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+SESSION_ENGINE = 'django.contrib.sessions.backends.db' #stocker les sessions utilisateur
+
+SESSION_COOKIE_SECURE = True  # HTTPS uniquement (activé en production)
+SESSION_COOKIE_HTTPONLY = True  # Empêche l'accès JavaScript
+SESSION_COOKIE_SAMESITE = 'Lax'  # Protection CSRF
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True # Expirer à la fermeture du navigateur

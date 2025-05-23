@@ -24,11 +24,12 @@ vault_secrets = get_vault_secrets()
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = vault_secrets['django_secret_key']
+DOMAIN_NAME = os.getenv('DOMAIN_NAME', 'localhost')
+PORT_NUM = os.getenv('PORT_NUM', '4343')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['localhost']
 
 # Application definition
 
@@ -113,8 +114,6 @@ DATABASES = {
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.BasicAuthentication',   
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
@@ -184,17 +183,21 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 
+# Autoriser les credentials (cookies, tokens, etc.)
+CORS_ALLOW_CREDENTIALS = True
 
 # CORS settings
 CORS_ALLOW_ALL_ORIGINS = False  # Ne pas permettre à tous les origines par défaut
 CORS_ALLOWED_ORIGINS = [
-    'https://localhost:4343',
+    f"https://{DOMAIN_NAME}:{PORT_NUM}",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    'https://localhost:4343',
-    'https://localhost',
+    f"https://{DOMAIN_NAME}:{PORT_NUM}",
+    f"https://{DOMAIN_NAME}",
 ]
+
+ALLOWED_HOSTS = [DOMAIN_NAME]
 
 # Autoriser les en-têtes spécifiques (nécessaire pour les tokens JWT et WebSocket)
 CORS_ALLOW_HEADERS = [
@@ -218,7 +221,5 @@ CORS_ALLOW_METHODS = [
     'PUT',
 ]
 
-# Autoriser les credentials (cookies, tokens, etc.)
-CORS_ALLOW_CREDENTIALS = True
 
 LOGOUT_REDIRECT_URL = '/pong/admin/'

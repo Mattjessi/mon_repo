@@ -3,15 +3,17 @@ from channels.layers import get_channel_layer
 from django.db.models import Q
 from django.urls import reverse
 from rest_framework import generics, permissions, serializers
-from core.models import Game, Invitation, StatusChoices, TournamentStatusChoices, TypeChoices
+from core.models import Game, Invitation, StatusChoices, TournamentStatusChoices, TypeChoices, Winrate
 from shared_models.models import Player, Block, Match, Tournament
+import os
+
+DOMAIN_NAME = os.getenv('DOMAIN_NAME', 'localhost')
+PORT_NUM = os.getenv('PORT_NUM', '4343')
 
 class PongPlayerSerializer(serializers.ModelSerializer):
-    username = serializers.CharField(source='user.username', read_only=True)
-
     class Meta:
         model = Player
-        fields = ['id', 'username']
+        fields = ['id', 'name']
 
 class PongGameSerializer(serializers.ModelSerializer):
     player_1 = PongPlayerSerializer(read_only=True)
@@ -25,7 +27,7 @@ class PongGameSerializer(serializers.ModelSerializer):
 
     def get_url(self, obj):
         request = self.context.get('request')
-        return reverse('game-detail', args=[obj.match.id, obj.id], request=request)
+        return reverse('game-detail', args=[obj.match.id, obj.id])
 
 class PongMatchSerializer(serializers.ModelSerializer):
     player_1 = PongPlayerSerializer(read_only=True)
@@ -36,11 +38,16 @@ class PongMatchSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Match
-        fields = ['id', 'url', 'status', 'number_of_rounds', 'type', 'player_1', 'player_2', 'winner', 'games', 'tournament', 'number_of_rounds']
+        fields = ['id', 'url', 'status', 'number_of_rounds', 'type', 'player_1', 'player_2', 'winner', 'games', 'tournament', 'number_of_rounds', 'created_at']
 
     def get_url(self, obj):
         request = self.context.get('request')
-        return reverse('match-detail', args=[obj.id], request=request)
+        response = {
+            'url': reverse('match-detail', args=[obj.id]),
+        }
+        if request and request.user and (request.user == obj.player_1.user or request.user == obj.player_2.user):
+            response['ws_url'] = f"wss://{DOMAIN_NAME}:{PORT_NUM}/pong/ws/match/{obj.id}/"
+        return response
 
 class PongInvitationSerializer(serializers.ModelSerializer):
     from_player = PongPlayerSerializer(read_only=True)
@@ -139,7 +146,7 @@ class PongInvitationSerializer(serializers.ModelSerializer):
                 {
                     "type": "invitation_received",
                     "invitation_id": invitation.id,
-                    "from_player": invitation.from_player.user.username,
+                    "from_player": invitation.from_player.name,
                     "number_of_rounds": invitation.number_of_rounds,
                     "max_score_per_round": invitation.max_score_per_round,
                     "match_type": invitation.match_type
@@ -147,6 +154,52 @@ class PongInvitationSerializer(serializers.ModelSerializer):
             )
 
         return invitation
+    
+class InvitationCancelSerializer(serializers.Serializer):
+    def validate(self, attrs):
+        invitation = self.instance
+        user = self.context['request'].user
+
+        # Vérifier si l'utilisateur a un profil joueur
+        try:
+            player = Player.objects.get(user=user)
+        except Player.DoesNotExist:
+            raise serializers.ValidationError({"code": 4001})  # Pas de profil joueur
+
+        # Vérifier si le joueur est l'expéditeur de l'invitation
+        if invitation.from_player != player:
+            raise serializers.ValidationError({"code": 4029})  # Pas l'expéditeur
+
+        # Vérifier si l'invitation est en attente
+        if invitation.status != StatusChoices.EN_ATTENTE:
+            raise serializers.ValidationError({"code": 4011})  # Invitation non en attente
+
+        attrs['player'] = player
+        return attrs
+
+    def update(self, instance, validated_data):
+        # Mettre à jour l'invitation
+        instance.status = StatusChoices.ANNULEE
+        instance.save()
+
+        # Notifier le joueur destinataire via WebSocket
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"user_{instance.to_player.id}",
+            {
+                "type": "invitation_canceled",
+                "invitation_id": instance.id,
+                "from_player": instance.from_player.name
+            }
+        )
+
+        return instance
+
+    def to_representation(self, instance):
+        return {
+            "code": 1000,
+            "invitation_id": instance.id,
+        }
 
 class InvitationAcceptSerializer(serializers.Serializer):
     def validate(self, attrs):
@@ -202,8 +255,8 @@ class InvitationAcceptSerializer(serializers.Serializer):
             player_1=match.player_1,
             player_2=match.player_2,
             status=StatusChoices.EN_COURS,
-            ball_position={"x": 400, "y": 200},
-            paddle_position={"paddle_l": 160, "paddle_r": 160},
+            ball_position={"x": 0, "y": 15},
+            paddle_position={"paddle_l": 15, "paddle_r": 15},
             round_number=1,
             max_score=instance.max_score_per_round
         )
@@ -227,8 +280,8 @@ class InvitationAcceptSerializer(serializers.Serializer):
                 {
                     "type": "match_created",
                     "match_id": match.id,
-                    "player_1": match.player_1.user.username,
-                    "player_2": match.player_2.user.username,
+                    "player_1": match.player_1.name,
+                    "player_2": match.player_2.name,
                     "number_of_rounds": match.number_of_rounds,
                     "match_type": match.type
                 }
@@ -276,7 +329,7 @@ class InvitationDeclineSerializer(serializers.Serializer):
             {
                 "type": "invitation_declined",
                 "invitation_id": instance.id,
-                "to_player": instance.to_player.user.username
+                "to_player": instance.to_player.name
             }
         )
 
@@ -488,11 +541,17 @@ class TournamentStartSerializer(serializers.Serializer):
         return attrs
 
     def calculate_win_rate(self, player):
-        """Calcule le win rate d'un joueur (en pourcentage)."""
-        total_games = player.victory + player.defeat
-        if total_games == 0:
+        """Calcule le winrate d'un joueur."""
+        try:
+            # Récupérer ou créer le winrate si nécessaire
+            winrate, _ = Winrate.objects.get_or_create(player=player)
+            total_games = winrate.victory + winrate.defeat
+            if total_games == 0:
+                return 0.0
+            return (winrate.victory / total_games) * 100
+        except Exception:
+            # En cas d'erreur, retourner 0
             return 0.0
-        return (player.victory / total_games) * 100
 
     def pair_players(self, tournament):
         """Trie les joueurs par win rate et crée les paires pour les demi-finales."""
@@ -548,7 +607,7 @@ class TournamentStartSerializer(serializers.Serializer):
                 tournament=instance,
                 player_1=player_1,
                 player_2=player_2,
-                number_of_rounds=3,
+                number_of_rounds=1,
                 match_number=2,
                 status=StatusChoices.EN_COURS,
                 type=TypeChoices.TOURNAMENT,
@@ -575,7 +634,7 @@ class TournamentStartSerializer(serializers.Serializer):
                         "number_of_rounds": instance.number_of_rounds,
                         "max_score_per_round": instance.max_score_per_round,
                         "match_type": "tournament_semi_final",
-                        "ws_url": f"ws://localhost:8002/ws/pong/match/{match.id}/",
+                        "ws_url": f"wss://{DOMAIN_NAME}:{PORT_NUM}/pong/ws/match/{match.id}/",
                         "tournament_id": instance.id,
                         "tournament_name": instance.name
                     }
@@ -641,7 +700,7 @@ class TournamentStartFinalSerializer(serializers.Serializer):
             match_number=1,
             player_1=finalists[0],
             player_2=finalists[1],
-            number_of_rounds=3,
+            number_of_rounds=1,
             status=StatusChoices.EN_COURS,
             type=TypeChoices.TOURNAMENT
         )
@@ -670,7 +729,7 @@ class TournamentStartFinalSerializer(serializers.Serializer):
                     "number_of_rounds": instance.number_of_rounds,
                     "max_score_per_round": instance.max_score_per_round,
                     "match_type": "tournament_final",
-                    "ws_url": f"ws://localhost:8002/ws/pong/match/{final_match.id}/"
+                    "ws_url": f"wss://{DOMAIN_NAME}:{PORT_NUM}/pong/ws/match/{final_match.id}/"
                 }
             )
 
@@ -809,6 +868,50 @@ class TournamentLeaveSerializer(serializers.Serializer):
             "name": instance.name
         }
 
+class TournamentSeeFinalSerializer(serializers.Serializer):
+    def validate(self, attrs):
+        tournament = self.instance
+        user = self.context['request'].user
+
+        # Vérifier que l'utilisateur a un profil joueur
+        try:
+            player = Player.objects.get(user=user)
+        except Player.DoesNotExist:
+            raise serializers.ValidationError({"code": 4001})  # Aucun profil joueur associé à l'utilisateur
+
+        # Vérifier que le joueur est présent dans le tournoi
+        if player not in [tournament.player_1, tournament.player_2, tournament.player_3, tournament.player_4]:
+            raise serializers.ValidationError({"code": 4017})  # Seul un participant du tournoi peut démarrer la finale
+
+        # Vérifier que le tournoi est en statut EN_COURS
+        if tournament.status != TournamentStatusChoices.EN_COURS:
+            raise serializers.ValidationError({"code": 4018})  # Tournoi doit être en cours pour lancer la finale
+
+        # Vérifier que les demi-finales sont terminées
+        demi_finales = Match.objects.filter(match_number=2, tournament=tournament)
+        if demi_finales.count() != 2:
+            raise serializers.ValidationError({"code": 4022})  # Tournoi doit avoir exactement deux matchs de demi-finales
+        for match in demi_finales:
+            if match.status != StatusChoices.TERMINE:
+                raise serializers.ValidationError({"code": 4023})  # Tous les matchs des demi-finales doivent être terminés
+            if not match.winner:
+                raise serializers.ValidationError({"code": 4024})  # Tous les matchs des demi-finales doivent avoir un gagnant
+
+        finalists = [match.winner for match in demi_finales]
+        attrs['finalist1'] = finalists[0]
+        attrs['finalist2'] = finalists[1]
+        return attrs
+
+    def to_representation(self, instance):
+        validated_data = self.validated_data
+        finalist1 = validated_data['finalist1']
+        finalist2 = validated_data['finalist2']
+        return {
+            "code": 1000,
+            "finalist1": finalist1.username if finalist1 else None,  # Nom du joueur
+            "finalist2": finalist2.username if finalist2 else None,  # Nom du joueur
+        }
+
 class TournamentCancelSerializer(serializers.Serializer):
     def validate(self, attrs):
         tournament = self.instance
@@ -829,3 +932,43 @@ class TournamentCancelSerializer(serializers.Serializer):
             raise serializers.ValidationError({"code": 4028}) #Tournoi non supprimable (pas en statut ouvert)
 
         return attrs
+
+class TournamentGetIdSerializer(serializers.Serializer):
+    def validate(self, attrs):
+        user = self.context['request'].user
+
+        # Vérifier si l'utilisateur a un profil joueur
+        try:
+            player = Player.objects.get(user=user)
+        except Player.DoesNotExist:
+            raise serializers.ValidationError({"code": 4001}) #Aucun profil joueur associé
+        
+        # Vérifier si le joueur participe à un tournoi ouvert ou en cours
+        tournament = Tournament.objects.filter(
+            Q(player_1=player) | Q(player_2=player) | Q(player_3=player) | Q(player_4=player),
+            status__in=[TournamentStatusChoices.OUVERT, TournamentStatusChoices.EN_COURS]
+        ).first()
+
+        if not tournament:
+            raise serializers.ValidationError({"code": 1000, "tournament_id": None}) #Vous ne participez à aucun tournoi ouvert ou en cours
+
+        attrs['player'] = player
+        attrs['tournament'] = tournament
+        return attrs
+
+    def to_representation(self, validated_data):
+        tournament = validated_data['tournament']
+        return {
+            "code": 1000,
+            "tournament_id": tournament.id,
+            "name": tournament.name,
+            "status": tournament.status
+        }
+
+class WinrateSerializer(serializers.ModelSerializer):
+    player = PongPlayerSerializer(read_only=True)
+    
+    class Meta:
+        model = Winrate
+        fields = ['id', 'player', 'victory', 'defeat']
+

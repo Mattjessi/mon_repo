@@ -1,26 +1,43 @@
 import React from 'react'
 import { Routes, Route } from 'react-router-dom'
-import { PublicRoute, PrivateRoute } from './api/api'
-import Login from './login/page'
-import Register from './register/page'
-import Home from './home/page'
+import { useAuth } from "./auth/context"
+import AuthRedirect from './auth/redirect'
+import LoginPage from './login/page'
+import RegisterPage from './register/page'
+import OauthPage from './Oauth/page'
+import Complete from './Oauth/complete/page'
+import HomePage from './home/page'
 import Profile from './profile/page'
 import ProfileEdit from './profile/edit/page'
-import Local from './game/local/page'
-import LocalGame from './game/local/game/page'
+import Online from './online/page'
+import Tournament from './tournament/page'
 
 const App = () => {
 
+	const { loading, user } = useAuth()
+
+	if (loading)
+		return(<div className="text-center mt-5">Loading...</div>)
+
 	return (
-		<Routes>
-			<Route path="/" element={ <PublicRoute element={ <Login/> }/>}/>
-			<Route path="/register" element={ <PublicRoute element={ <Register/> }/>}/>
-			<Route path="/home" element={ <PrivateRoute element={ <Home/> }/>}/>
-			<Route path="/profile/:userID" element={ <PrivateRoute element={ <Profile/> }/>}/>
-			<Route path="/profile/:userID/edit" element={ <PrivateRoute element={ <ProfileEdit/> }/>}/>
-			<Route path="/local" element={ <PrivateRoute element={ <Local/> }/>}/>
-			<Route path="/local/game" element={ <PrivateRoute element={ <LocalGame/> }/>}/>
-		</Routes>)
+		<AuthRedirect>
+			<Routes>
+				<Route path="/" element={ <LoginPage/> }/>
+				<Route path="/register" element={ <RegisterPage/> }/>
+				<Route path="/register/42" element={ <OauthPage/> }/>
+				<Route path="/register/42/complete" element={ <Complete/> }/>
+				<Route path="/home" element={ <HomePage user={ user }/> }/>
+				<Route path="/profile/:userID" element={ <Profile user={ user }/> }/>
+				<Route path="/profile/:userID/edit" element={ <ProfileEdit user={ user }/> }/>
+				<Route path="/online" element={ <Online user={ user }/>}/>
+				<Route path="/tournament" element={ <Tournament user={ user }/>}/>
+				<Route path="*" element={ <NotFound/>}/>
+			</Routes>
+		</AuthRedirect>)
 }
 
-export default App;
+export default App
+
+const NotFound = () => {
+	return(<div className="text-center mt-5">Error 404</div>)
+}

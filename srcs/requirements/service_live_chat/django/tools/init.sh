@@ -11,8 +11,6 @@ done
 
 echo "Redis fonctionnel"
 
-sed -i "s/\${DOMAIN_NAME}/$DOMAIN_NAME/g" /django_web_app/django_live_chat/settings.py
-
 source /django_web_app/.env/bin/activate \
 	&& python3 manage.py makemigrations shared_models --no-input \
 	&& python3 manage.py migrate --fake-initial --no-input \

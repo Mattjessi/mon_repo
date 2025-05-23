@@ -1,16 +1,8 @@
-import React, { useEffect, useRef } from "react"
-import { useNavigate } from "react-router-dom"
-import Gameplay from "../gameplay/menu/page.jsx"
-import UserPass from "./UserPass.jsx"
+import React from "react"
+import Background from "../background/background.jsx"
+import Register from "./register.jsx"
 
-function Register() {
-
-	const canva = useRef(null)
-
-	useEffect(() => {
-		if (canva.current)
-			canva.current.style.filter = 'blur(5px)'
-	}, [])
+function RegisterPage() {
 
 	return (
 		<>
@@ -23,13 +15,11 @@ function Register() {
 				</div>
 			</header>
 			<main>
-				<div className="position-fixed top-0">
-					<Gameplay canva={canva}/>
-					<div className="position-absolute top-0 d-flex justify-content-center align-items-center vh-100 w-100">
-						<div className="rounded border border-black border-2 px-3 px-lg-5 pt-2 pt-lg-4 pb-3 pb-lg-4"
-							style={{background: "rgba(0, 0, 0, 0.7)"}}>
-							<UserPass/>
-						</div>
+				<Background type={"public"} />
+				<div className="position-absolute top-0 d-flex justify-content-center align-items-center vh-100 w-100">
+					<div className="rounded border border-black border-2 px-3 px-lg-5 pt-2 pt-lg-4 pb-3 pb-lg-4"
+						style={{background: "rgba(0, 0, 0, 0.7)"}}>
+						<Register/>
 					</div>
 				</div>
 			</main>
@@ -37,4 +27,4 @@ function Register() {
 	)
 }
 
-export default Register
+export default RegisterPage

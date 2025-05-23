@@ -19,7 +19,6 @@ django_asgi_app = get_asgi_application()
 
 # Importer les modules dépendants de Django après l'initialisation
 from core.middleware import CustomAuthMiddlewareStack
-from core.cors import CorsOriginValidator
 import core.routing
 
 application = ProtocolTypeRouter({

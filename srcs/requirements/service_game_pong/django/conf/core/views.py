@@ -2,7 +2,7 @@ from rest_framework import generics, serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from core.models import Game, Invitation, StatusChoices, TournamentStatusChoices
+from core.models import Game, Invitation, StatusChoices, TournamentStatusChoices, Winrate
 from shared_models.models import Player, Match, Tournament
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
@@ -15,7 +15,7 @@ from django.utils.decorators import method_decorator
 class InvitationListAPI(generics.ListAPIView):
     """
     Liste les invitations en attente destinées au joueur connecté.
-    - GET /pong/api/invitations/ : Liste les invitations reçues en attente pour l'utilisateur.
+    - GET /pong/invitations/ : Liste les invitations reçues en attente pour l'utilisateur.
     """
     permission_classes = [IsAuthenticated]
     serializer_class = serializers.PongInvitationSerializer
@@ -25,22 +25,33 @@ class InvitationListAPI(generics.ListAPIView):
             player = Player.objects.get(user=self.request.user)
         except Player.DoesNotExist:
             raise serializers.ValidationError({"code": 4001})  # Aucun profil joueur associé à l'utilisateur
-        return Invitation.objects.filter(to_player=player, status=StatusChoices.EN_ATTENTE)
+        return Invitation.objects.filter(to_player=player, status=StatusChoices.EN_ATTENTE) | Invitation.objects.filter(from_player=player, status=StatusChoices.EN_ATTENTE)
     
 @method_decorator(csrf_exempt, name='dispatch')
 class InvitationCreateAPI(generics.CreateAPIView):
     """
     Crée une nouvelle invitation.
-    - POST /pong/api/invitations/create/
+    - POST /pong/invitations/create/
     """
     permission_classes = [IsAuthenticated]
     serializer_class = serializers.PongInvitationSerializer
 
 @method_decorator(csrf_exempt, name='dispatch')
+class InvitationCancelAPI(generics.UpdateAPIView):
+    """
+    Permet à from_player d'annuler une invitation qu'il a envoyée.
+    - POST /pong/invitations/<id>/cancel/
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = serializers.InvitationCancelSerializer
+    queryset = Invitation.objects.all()
+    lookup_field = 'id'
+    
+@method_decorator(csrf_exempt, name='dispatch')
 class InvitationAcceptAPI(generics.UpdateAPIView):
     """
     Permet à player_2 d'accepter une invitation.
-    - POST /pong/api/invitations/<id>/accept/
+    - POST /pong/invitations/<id>/accept/
     """
     permission_classes = [IsAuthenticated]
     serializer_class = serializers.InvitationAcceptSerializer
@@ -52,7 +63,7 @@ class InvitationAcceptAPI(generics.UpdateAPIView):
 class InvitationDeclineAPI(generics.UpdateAPIView):
     """
     Permet à player_2 de refuser une invitation.
-    - POST /pong/api/invitations/<id>/decline/
+    - POST /pong/invitations/<id>/decline/
     """
     permission_classes = [IsAuthenticated]
     serializer_class = serializers.InvitationDeclineSerializer
@@ -60,11 +71,39 @@ class InvitationDeclineAPI(generics.UpdateAPIView):
     lookup_field = 'id'
 
 @method_decorator(csrf_exempt, name='dispatch')
+class WinrateAPI(generics.RetrieveAPIView):
+    """
+    Récupère les statistiques de Winrate d'un joueur.
+    - GET /pong/winrate/ : Récupère le winrate de l'utilisateur authentifié.
+    - GET /pong/winrate/?player_id=<id> : Récupère le winrate d'un joueur spécifique.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = serializers.WinrateSerializer
+    
+    def get_object(self):
+        player_id = self.request.query_params.get('player_id')
+        
+        if player_id:
+            try:
+                player = Player.objects.get(id=player_id)
+            except Player.DoesNotExist:
+                raise serializers.ValidationError({"code": 4101}) #joueur rechercher introuvable
+        else:
+            try:
+                player = Player.objects.get(user=self.request.user)
+            except Player.DoesNotExist:
+                raise serializers.ValidationError({"code": 4001}) #joueur connecter introuvable
+        
+        # Récupérer ou créer le winrate pour le joueur
+        winrate, _ = Winrate.objects.get_or_create(player=player)
+        return winrate
+
+@method_decorator(csrf_exempt, name='dispatch')
 class MatchListAPI(generics.ListAPIView):
     """
     Liste les matchs où l'utilisateur est impliqué.
-    - GET /pong/api/matches/ : Liste les matchs de l'utilisateur authentifié.
-    - GET /pong/api/matches/?player_id=<id> : Liste les matchs d'un joueur spécifique.
+    - GET /pong/matches/ : Liste les matchs de l'utilisateur authentifié.
+    - GET /pong/matches/?player_id=<id> : Liste les matchs d'un joueur spécifique.
     """
     permission_classes = [IsAuthenticated]
     serializer_class = serializers.PongMatchSerializer
@@ -75,7 +114,7 @@ class MatchListAPI(generics.ListAPIView):
             try:
                 player = Player.objects.get(id=player_id)
             except Player.DoesNotExist:
-                raise serializers.ValidationError({"error": "Joueur introuvable"})
+                raise serializers.ValidationError({"code": 4101})
             return Match.objects.filter(player_1=player) | Match.objects.filter(player_2=player)
         player = Player.objects.get(user=self.request.user)
         return Match.objects.filter(player_1=player) | Match.objects.filter(player_2=player)
@@ -191,6 +230,37 @@ class TournamentLeaveAPI(generics.UpdateAPIView):
     def get_object(self):
         """Récupère le tournoi par ID."""
         return super().get_object()
+
+@method_decorator(csrf_exempt, name='dispatch')
+class TournamentGetIdAPI(generics.GenericAPIView):
+    """
+    Récupère l'ID d'un tournoi.
+    - GET /pong/tournaments/get-id/ : Retourne l'ID du tournoi.
+    """
+    serializer_class = serializers.TournamentGetIdSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.to_representation(serializer.validated_data))
+
+@method_decorator(csrf_exempt, name='dispatch')
+class TournamentSeeFinalistsAPI(generics.GenericAPIView):
+    """
+    Récupère les finalistes d’un tournoi en cours.
+    - GET /pong/tournaments/<id>/finalists/ : Retourne les deux finalistes du tournoi spécifié.
+    """
+    serializer_class = serializers.TournamentSeeFinalSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'id'
+    queryset = Tournament.objects.all()
+
+    def get(self, request, *args, **kwargs):
+        tournament = self.get_object()
+        serializer = self.get_serializer(instance=tournament, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.to_representation(tournament))
 
 @method_decorator(csrf_exempt, name='dispatch')
 class TournamentCancelAPI(generics.DestroyAPIView):

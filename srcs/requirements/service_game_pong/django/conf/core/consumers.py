@@ -1,11 +1,17 @@
 import asyncio
 import json
+import time
+from datetime import datetime, timedelta
+import os
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from core.pong import game_pong
 from shared_models.models import Player, Match
 from .models import Match, Player, StatusChoices, Game
+
+DOMAIN_NAME = os.getenv('DOMAIN_NAME', 'localhost')
+PORT_NUM = os.getenv('PORT_NUM', '4343')
 
 class NotificationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -43,7 +49,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             "player_2": event["player_2"],
             "number_of_rounds": event["number_of_rounds"],
             "match_type": event["match_type"],
-            "ws_url": f"ws://localhost:8002/ws/pong/match/{event['match_id']}/"
+            "ws_url": f"wss://{DOMAIN_NAME}:{PORT_NUM}/pong/ws/match/{event['match_id']}/"
         }))
 
     async def invitation_declined(self, event):
@@ -111,6 +117,12 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             "leaved_player": event["leaved_player"]
         }))
 
+    async def invitation_canceled(self, event):
+        await self.send(text_data=json.dumps({
+            "type": "invitation_canceled",
+            "invitation_id": event["invitation_id"],
+            "from_player": event["from_player"]
+        }))
 
 
 class PongConsumer(AsyncWebsocketConsumer):
@@ -130,7 +142,20 @@ class PongConsumer(AsyncWebsocketConsumer):
     c_current_game_id = {}  # ID de la Game en cours par match_id
     game_tasks = {} # Tâches game_pong par match_id
     task_locks = {} # Verrous pour la création des tâches par match_id
+    disconnection_times = {}
+    c_key_states = {}
 
+    FORFEIT_DELAY = 60
+
+    @database_sync_to_async
+    def get_player_info(self, player_id):
+        """Récupère l'id et le nom d'un joueur."""
+        try:
+            player = Player.objects.get(id=player_id)
+            return {"id": player.id, "name": player.name}
+        except Player.DoesNotExist:
+            return {"id": player_id, "name": "Joueur inconnu"}
+    
     @database_sync_to_async
     def get_active_game(self, match_id):
         """Récupère la partie active (EN_COURS) pour un match_id donné."""
@@ -180,16 +205,36 @@ class PongConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             print(f"Error saving game state for match {self.match_id}: {str(e)}")
 
+    def get_winner_info(self, winner_id):
+        """Récupère les informations du gagnant de manière synchrone."""
+        try:
+            player_winner = Player.objects.get(id=winner_id)
+            return {
+                'id': player_winner.id,
+                'name': player_winner.name
+            }
+        except Player.DoesNotExist:
+            return {'id': None, 'name': None}
 
     async def handle_game_end(self, game, winner_id):
         """Gère la fin d'un jeu et détermine si le match est terminé ou s'il faut lancer un nouveau jeu."""
+        winner_name = None
+        winner_playerid = None
+        if winner_id:
+            try:
+                winner_info = await database_sync_to_async(self.get_winner_info)(winner_id)
+                winner_name = winner_info.get('name')
+                winner_playerid = winner_info.get('id')
+            except Exception as e:
+                print(f"Error getting winner info: {str(e)}")
         # Envoyer l'événement de fin de jeu actuel
         await self.channel_layer.group_send(
             self.room_group_name,
             {
                 "type": "game_ended",
                 "game_id": game.id,
-                "winner": winner_id,
+                "winner_name": winner_name,
+                "winner_id": winner_playerid,
                 "scorePlayer1": self.c_scorep1[self.match_id],
                 "scorePlayer2": self.c_scorep2[self.match_id]
             }
@@ -209,6 +254,7 @@ class PongConsumer(AsyncWebsocketConsumer):
                 "round_number": self.game.round_number,
                 "x": self.c_ballx[self.match_id],
                 "y": self.c_bally[self.match_id],
+				"ws_url": f"wss://{DOMAIN_NAME}:{PORT_NUM}/pong/ws/match/{self.match_id}/",
                 "paddleL": self.c_paddleL[self.match_id],
                 "paddleR": self.c_paddleR[self.match_id],
                 "scorePlayer1": self.c_scorep1[self.match_id],
@@ -223,9 +269,11 @@ class PongConsumer(AsyncWebsocketConsumer):
                 "type": "match_ended",
                 "winner": match_result.get("winner"),
                 "player_1_wins": match_result.get("player_1_wins"),
-                "player_2_wins": match_result.get("player_2_wins")
+                "player_2_wins": match_result.get("player_2_wins"),
+				"match_number": match_result.get("match_number"),
             }
             await self.channel_layer.group_send(self.room_group_name, match_ended_event)
+            await asyncio.sleep(1)
             return match_ended_event
         
     
@@ -311,9 +359,10 @@ class PongConsumer(AsyncWebsocketConsumer):
 
             # Retourner les données, pas un événement
             return {
-                "winner": match.winner.user.username if match.winner else None,
+                "winner": match.winner.name if match.winner else None,
                 "player_1_wins": player_1_wins,
-                "player_2_wins": player_2_wins
+                "player_2_wins": player_2_wins,
+				"match_number": match.match_number,
             }
         except Exception as e:
             print(f"Error ending match {self.match_id}: {str(e)}")
@@ -398,14 +447,20 @@ class PongConsumer(AsyncWebsocketConsumer):
             }
         )
 
+        if self.match_id in self.disconnection_times and self.player_id in self.disconnection_times[self.match_id]:
+            del self.disconnection_times[self.match_id][self.player_id]
+
         self.running = True
         self.periodic_task = asyncio.create_task(self.send_periodic_data())
+        self.paddle_movement_task = asyncio.create_task(self.process_paddle_movements())
 
     async def disconnect(self, close_code):
         """Gère la déconnexion d'un joueur."""
         self.running = False
         if hasattr(self, 'periodic_task'):
             self.periodic_task.cancel()
+        if hasattr(self, 'paddle_movement_task'):
+            self.paddle_movement_task.cancel()
 
         if hasattr(self, 'room_group_name') and hasattr(self, 'channel_name'):
             await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
@@ -415,6 +470,12 @@ class PongConsumer(AsyncWebsocketConsumer):
         if hasattr(self, 'match_id') and hasattr(self, 'player_id'):
             if self.match_id in self.c_players:
                 self.c_players[self.match_id].discard(self.player_id)
+                if self.match_id not in self.disconnection_times:
+                    self.disconnection_times[self.match_id] = {}
+                
+                # Enregistrer l'heure de déconnexion pour ce joueur
+                current_time = datetime.now()
+                self.disconnection_times[self.match_id][self.player_id] = current_time
 
                 # Envoyer le nombre de joueurs connectés
                 await self.channel_layer.group_send(
@@ -464,8 +525,8 @@ class PongConsumer(AsyncWebsocketConsumer):
         if not winner_id:
             return None
         if winner_id == game.player_1_id:
-            return game.player_1.user.username
-        return game.player_2.user.username
+            return game.player_1.name
+        return game.player_2.name
 
     async def run_game_loop(self):
         """Exécute game_pong dans une tâche unique pour un match."""
@@ -497,10 +558,10 @@ class PongConsumer(AsyncWebsocketConsumer):
     async def send_periodic_data(self):
         while self.running:
             if self.c_status.get(self.match_id) != StatusChoices.EN_COURS:
-                        self.game = await self.get_active_game(self.match_id)
-                        if not self.game:
-                            await self.handle_match_end()
-                            return
+                self.game = await self.get_active_game(self.match_id)
+                if not self.game:
+                    await self.handle_match_end()
+                    return
             try:
                 await self.channel_layer.group_send(
                     self.room_group_name,
@@ -517,7 +578,7 @@ class PongConsumer(AsyncWebsocketConsumer):
             except Exception as e:
                 print(f"Error in send_periodic_data for match {self.match_id}: {str(e)}")
                 break
-            await asyncio.sleep(1 / 60)  # 120 Hz
+            await asyncio.sleep(1 / 60)  # 60 Hz
 
     async def player_count_update(self, event):
         """Envoie le nombre de joueurs connectés aux clients."""
@@ -545,6 +606,14 @@ class PongConsumer(AsyncWebsocketConsumer):
             "message": event["message"]
         }))
 
+    async def score_update(self, event):
+        """Informe les clients que le score est mise a jour."""
+        await self.send(text_data=json.dumps({
+            "type": "score_update",
+            "scorePlayer1": event["score_Player_1"],
+            "scorePlayer2":event["score_Player_2"],
+        }))
+        
     async def game_resumed(self, event):
         """Informe les clients que le jeu reprend."""
         await self.send(text_data=json.dumps({
@@ -572,6 +641,7 @@ class PongConsumer(AsyncWebsocketConsumer):
             "round_number": event["round_number"],
             "x": event["x"],
             "y": event["y"],
+			"ws_url": event["ws_url"],
             "paddleL": event["paddleL"],
             "paddleR": event["paddleR"],
             "scorePlayer1": event["scorePlayer1"],
@@ -583,8 +653,9 @@ class PongConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             "type": "match_ended",
             "winner": event["winner"],
+            "match_number": event["match_number"],
             "player_1_wins": event["player_1_wins"],
-            "player_2_wins": event["player_2_wins"]
+            "player_2_wins": event["player_2_wins"],
         }))
 
     async def handle_match_end(self):
@@ -601,50 +672,252 @@ class PongConsumer(AsyncWebsocketConsumer):
                         "type": "match_ended",
                         "winner": match_result.get("winner"),
                         "player_1_wins": match_result.get("player_1_wins"),
-                        "player_2_wins": match_result.get("player_2_wins")
+                        "player_2_wins": match_result.get("player_2_wins"),
+						"match_number": match_result.get("match_number"),
                     }
                 )
                 # Attendre que les messages soient propagés
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(1)
         except Exception as e:
             print(f"Error in handle_match_end: {str(e)}")
         finally:
             # Fermer la connexion après avoir envoyé tous les messages
             await self.close()
+
+    async def handle_forfeit(self, winner_id):
+        """Gère la victoire par forfait lorsqu'un joueur se déconnecte."""
+        try:
+            # Récupérer la partie active
+            self.game = await self.get_active_game(self.match_id)
+            if not self.game:
+                await self.send(text_data=json.dumps({
+                    "type": "error",
+                    "message": "Aucune partie active trouvée"
+                }))
+                return
+                
+            # Mettre à jour le score pour assurer la victoire
+            if winner_id == self.game.player_1_id:
+                self.c_scorep1[self.match_id] = self.game.max_score
+                self.c_scorep2[self.match_id] = 0
+            else:
+                self.c_scorep1[self.match_id] = 0
+                self.c_scorep2[self.match_id] = self.game.max_score
+                
+            # Terminer le jeu actuel et attribuer la victoire
+            game_end_result = await self.end_game(self.game, winner_id)
             
+            # Envoyer l'événement de fin de jeu
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    "type": "game_ended",
+                    "game_id": self.game.id,
+                    "winner": winner_id,
+                    "scorePlayer1": self.c_scorep1[self.match_id],
+                    "scorePlayer2": self.c_scorep2[self.match_id],
+                    "forfeit": True
+                }
+            )
+            
+            # Vérifier le statut du match
+            match_status = game_end_result.get("status")
+            
+            # Terminer le match si nécessaire
+            if match_status == "ended" or match_status == "continue":
+                # Dans le cas du forfait, on termine directement le match 
+                # même s'il reste des rounds
+                match_result = await self.end_match_forfeit(self.match, winner_id)
+                match_ended_event = {
+                    "type": "match_ended",
+                    "winner": match_result.get("winner"),
+                    "player_1_wins": match_result.get("player_1_wins"),
+                    "player_2_wins": match_result.get("player_2_wins"),
+                    "forfeit": True,
+					"match_number": match_result.get("match_number"),
+                }
+                await self.channel_layer.group_send(self.room_group_name, match_ended_event)
+                
+                # Informer l'utilisateur que sa demande a été traitée avec succès
+                await self.send(text_data=json.dumps({
+                    "type": "forfeit_success",
+                    "message": "Vous avez été déclaré vainqueur par forfait"
+                }))
+                await asyncio.sleep(1)
+                
+        except Exception as e:
+            print(f"Error handling forfeit for match {self.match_id}: {str(e)}")
+            await self.send(text_data=json.dumps({
+                "type": "error",
+                "message": f"Erreur lors du traitement du forfait: {str(e)}"
+            }))
+
+    # Ajouter cette méthode pour finaliser le match en cas de forfait
+    @database_sync_to_async
+    def end_match_forfeit(self, match, winner_id):
+        """Met fin au match en cas de forfait et déclare le gagnant."""
+        try:
+            match.status = StatusChoices.TERMINE
+            
+            # Mettre à jour les victoires pour le gagnant
+            if self.match_id in self.c_game_wins:
+                self.c_game_wins[self.match_id][winner_id] = match.number_of_rounds
+                
+                # Mettre à jour le gagnant pour le match
+                if winner_id == match.player_1_id:
+                    match.winner = match.player_1
+                    player_1_wins = match.number_of_rounds
+                    player_2_wins = 0
+                else:
+                    match.winner = match.player_2
+                    player_1_wins = 0
+                    player_2_wins = match.number_of_rounds
+            
+            # Mettre à jour la raison de la fin (forfait)
+            match.forfeit = True
+            match.save()
+
+            return {
+                "winner": match.winner.name if match.winner else None,
+                "player_1_wins": player_1_wins,
+                "player_2_wins": player_2_wins,
+				"match_number": match.match_number,
+            }
+        except Exception as e:
+            print(f"Error ending match by forfeit {self.match_id}: {str(e)}")
+            return {"error": str(e)}
+            
+    async def process_paddle_movements(self):
+        """Traite les mouvements des raquettes en fonction de l'état des touches."""
+        last_time = time.time()
+        paddle_speed = 0.5  # Vitesse de déplacement en pixels
+        
+        while self.running:
+            current_time = time.time()
+            dt = current_time - last_time  # Temps écoulé depuis la dernière mise à jour
+            last_time = current_time
+            
+            # Ajuster la vitesse de déplacement en fonction du temps écoulé
+            movement = paddle_speed * dt * 60  # Ajustement pour cibler 60 FPS
+            
+            if self.match_id in self.c_key_states:
+                # Traiter les mouvements du joueur 1
+                if self.game.player_1_id in self.c_key_states[self.match_id]:
+                    player_keys = self.c_key_states[self.match_id][self.game.player_1_id]
+                    
+                    if player_keys["up"]:
+                        new_position = self.c_paddleL[self.match_id] - movement
+                        self.c_paddleL[self.match_id] = max(0, new_position)
+                    if player_keys["down"]:
+                        new_position = self.c_paddleL[self.match_id] + movement
+                        max_position = self.game.canvas_height - self.game.paddle_height
+                        self.c_paddleL[self.match_id] = min(max_position, new_position)
+                
+                # Traiter les mouvements du joueur 2
+                if self.game.player_2_id in self.c_key_states[self.match_id]:
+                    player_keys = self.c_key_states[self.match_id][self.game.player_2_id]
+                    
+                    if player_keys["up"]:
+                        new_position = self.c_paddleR[self.match_id] - movement
+                        self.c_paddleR[self.match_id] = max(0, new_position)
+                    if player_keys["down"]:
+                        new_position = self.c_paddleR[self.match_id] + movement
+                        max_position = self.game.canvas_height - self.game.paddle_height
+                        self.c_paddleR[self.match_id] = min(max_position, new_position)
+            
+            await asyncio.sleep(1/60)
+
     async def receive(self, text_data):
-        """Gère les messages reçus des clients (mouvements des raquettes, dimensions)."""
+        """Gère les messages reçus des clients."""
         text_data_json = json.loads(text_data)
         action = text_data_json.get('action')
         move = text_data_json.get('type')
 
-        if action == 'set_dimensions':
-            self.game.canvas_width = text_data_json.get('canvas_width', self.game.canvas_width)
-            self.game.canvas_height = text_data_json.get('canvas_height', self.game.canvas_height)
-            self.game.paddle_width = text_data_json.get('paddle_width', self.game.paddle_width)
-            self.game.paddle_height = text_data_json.get('paddle_height', self.game.paddle_height)
-            self.game.ball_radius = text_data_json.get('ball_radius', self.game.ball_radius)
-            await self.save_game_state()
-            self.c_ballx[self.match_id] = self.game.canvas_width // 2
-            self.c_bally[self.match_id] = self.game.canvas_height // 2
-            paddle_center = (self.game.canvas_height - self.game.paddle_height) // 2
-            self.c_paddleL[self.match_id] = paddle_center
-            self.c_paddleR[self.match_id] = paddle_center
+        # Gérer l'action de forfait avec vérification du délai
+        if action == 'declare_win':
+            # Vérifier que le joueur qui demande est bien connecté
+            if self.player_id not in self.c_players.get(self.match_id, set()):
+                await self.send(text_data=json.dumps({
+                    "type": "error",
+                    "message": "Vous n'êtes pas autorisé à déclarer la victoire"
+                }))
+                return
+                
+            # Vérifier qu'il n'y a qu'un seul joueur connecté
+            if len(self.c_players.get(self.match_id, set())) != 1:
+                await self.send(text_data=json.dumps({
+                    "type": "error",
+                    "message": "Impossible de déclarer la victoire car les deux joueurs sont connectés ou aucun joueur n'est connecté"
+                }))
+                return
+            
+            # Vérifier le délai de déconnexion
+            disconnected_player_id = None
+            for player_id in [self.game.player_1_id, self.game.player_2_id]:
+                if player_id != self.player_id and self.match_id in self.disconnection_times and player_id in self.disconnection_times[self.match_id]:
+                    disconnected_player_id = player_id
+                    break
+            
+            if not disconnected_player_id:
+                await self.send(text_data=json.dumps({
+                    "type": "error",
+                    "message": "Aucun joueur n'est déconnecté"
+                }))
+                return
+                
+            # Vérifier si le délai est écoulé
+            disconnection_time = self.disconnection_times[self.match_id][disconnected_player_id]
+            current_time = datetime.now()
+            elapsed_seconds = (current_time - disconnection_time).total_seconds()
+            
+            if elapsed_seconds < self.FORFEIT_DELAY:
+                remaining_seconds = self.FORFEIT_DELAY - elapsed_seconds
+                await self.send(text_data=json.dumps({
+                    "type": "forfeit_not_available",
+                    "message": f"Vous pourrez déclarer la victoire dans {int(remaining_seconds)} secondes",
+                    "remaining_seconds": int(remaining_seconds)
+                }))
+                return
+                
+            # Le délai est écoulé, on peut déclarer la victoire
+            await self.handle_forfeit(self.player_id)
             return
-
+        
+        # Gérer les actions de mouvement
         if action == 'move_up':
+            # Initialiser la structure
+            if self.match_id not in self.c_key_states:
+                self.c_key_states[self.match_id] = {}
+            if self.player_id not in self.c_key_states[self.match_id]:
+                self.c_key_states[self.match_id][self.player_id] = {"up": False, "down": False}
+            
+            # Vérifier que le joueur contrôle la bonne raquette
             if move == 'paddle_l' and self.player_id == self.game.player_1_id:
-                new_position = self.c_paddleL[self.match_id] - 5
-                self.c_paddleL[self.match_id] = max(0, new_position)
+                self.c_key_states[self.match_id][self.player_id]["up"] = True
+                self.c_key_states[self.match_id][self.player_id]["down"] = False
             elif move == 'paddle_r' and self.player_id == self.game.player_2_id:
-                new_position = self.c_paddleR[self.match_id] - 5
-                self.c_paddleR[self.match_id] = max(0, new_position)
+                self.c_key_states[self.match_id][self.player_id]["up"] = True
+                self.c_key_states[self.match_id][self.player_id]["down"] = False
+                
         elif action == 'move_down':
+            # Initialiser la structure
+            if self.match_id not in self.c_key_states:
+                self.c_key_states[self.match_id] = {}
+            if self.player_id not in self.c_key_states[self.match_id]:
+                self.c_key_states[self.match_id][self.player_id] = {"up": False, "down": False}
+                
+            # Vérifier que le joueur contrôle la bonne raquette
             if move == 'paddle_l' and self.player_id == self.game.player_1_id:
-                new_position = self.c_paddleL[self.match_id] + 5
-                max_position = self.game.canvas_height - self.game.paddle_height
-                self.c_paddleL[self.match_id] = min(max_position, new_position)
+                self.c_key_states[self.match_id][self.player_id]["down"] = True
+                self.c_key_states[self.match_id][self.player_id]["up"] = False
             elif move == 'paddle_r' and self.player_id == self.game.player_2_id:
-                new_position = self.c_paddleR[self.match_id] + 5
-                max_position = self.game.canvas_height - self.game.paddle_height
-                self.c_paddleR[self.match_id] = min(max_position, new_position)
+                self.c_key_states[self.match_id][self.player_id]["down"] = True
+                self.c_key_states[self.match_id][self.player_id]["up"] = False
+                
+        elif action == 'key_up':
+            if self.match_id in self.c_key_states and self.player_id in self.c_key_states[self.match_id]:
+                # Vérifier que le joueur contrôle la bonne raquette
+                if move == 'up':
+                    self.c_key_states[self.match_id][self.player_id]["up"] = False
+                elif move == 'down':
+                    self.c_key_states[self.match_id][self.player_id]["down"] = False

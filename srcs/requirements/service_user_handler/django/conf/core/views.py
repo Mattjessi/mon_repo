@@ -5,8 +5,11 @@ from django.contrib.auth import authenticate
 from django.db import models
 from django.utils import timezone
 import uuid
+import requests
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from social_django.utils import psa
+from django.conf import settings
 
 # DRF imports
 from rest_framework import status, viewsets, generics, permissions
@@ -119,6 +122,11 @@ class PlayerLogin_api(APIView):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         player = serializer.save()
+        try:
+            player.online = True
+            player.save()
+        except (AttributeError, Player.DoesNotExist):
+            pass
         return Response(serializer.to_representation(player), status=status.HTTP_200_OK)
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -266,7 +274,7 @@ class BlockListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user.player_profile
-        return Block.objects.filter(blocker=user)
+        return Block.objects.filter(blocker=user) | Block.objects.filter(blocked=user)
 
 @method_decorator(csrf_exempt, name='dispatch')
 class UnblockPlayerView(generics.DestroyAPIView):
@@ -290,3 +298,140 @@ class UnblockPlayerView(generics.DestroyAPIView):
         self.perform_destroy(instance)
         return Response({"code": 1000}, status=status.HTTP_200_OK)
 
+# ============2FA================
+
+@method_decorator(csrf_exempt, name='dispatch')
+class Enable2FAView(generics.UpdateAPIView):
+    serializer_class = serializers.Enable2FASerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        try:
+            return self.request.user.player_profile
+        except AttributeError:
+            return Response({"code": 1043, "message": "Aucun profil joueur associé"}, status=status.HTTP_400_BAD_REQUEST)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = serializer.save()
+        return Response(serializer.to_representation(result), status=status.HTTP_200_OK)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class Disable2FAView(generics.DestroyAPIView):
+    serializer_class = serializers.Disable2FASerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        try:
+            return self.request.user.player_profile
+        except AttributeError:
+            return Response({"code": 1043, "message": "Aucun profil joueur associé"}, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if isinstance(instance, Response):  # Gérer le cas où get_object retourne une Response
+            return instance
+        serializer = self.get_serializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.update(instance, serializer.validated_data)
+        return Response(serializer.to_representation(instance), status=status.HTTP_200_OK)
+
+
+# ============OAUTH================
+
+@method_decorator(csrf_exempt, name='dispatch')
+class Auth42RegisterView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        redirect_url = (
+            f"https://api.intra.42.fr/oauth/authorize?"
+            f"client_id={settings.SOCIAL_AUTH_42_KEY}&"
+            f"redirect_uri={settings.SOCIAL_AUTH_REDIRECT_URI}&"
+            f"response_type=code"
+        )
+        return Response({"code": 1000, "redirect_url": redirect_url})
+
+@method_decorator(csrf_exempt, name='dispatch')
+class Auth42CallbackView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        code = request.GET.get('code')
+        if not code:
+            return Response({"code": 1051, "message": "Code d'autorisation manquant"}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Configuration OAuth
+            token_url = "https://api.intra.42.fr/oauth/token"
+            payload = {
+                'grant_type': 'authorization_code',
+                'client_id': settings.SOCIAL_AUTH_42_KEY,
+                'client_secret': settings.SOCIAL_AUTH_42_SECRET,
+                'code': code,
+                'redirect_uri': settings.SOCIAL_AUTH_REDIRECT_URI
+            }
+
+            # Obtenir le token
+            token_response = requests.post(token_url, data=payload)
+            token_data = token_response.json()
+            
+            if 'access_token' not in token_data:
+                return Response({"code": 1052, "message": "Échec de l'obtention du token"}, 
+                             status=status.HTTP_400_BAD_REQUEST)
+            
+            # Obtenir les données utilisateur
+            user_url = "https://api.intra.42.fr/v2/me"
+            headers = {'Authorization': f"Bearer {token_data['access_token']}"}
+            user_response = requests.get(user_url, headers=headers)
+            user_data = user_response.json()
+            
+            # Vérifier si un compte existe déjà
+            forty_two_id = str(user_data['id'])
+            login = user_data['login']
+            
+            if Player.objects.filter(forty_two_id=forty_two_id).exists():
+                return Response({"code": 1050}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Générer un nom unique
+            base_name = login
+            name = base_name
+            counter = 1
+            while Player.objects.filter(name=name).exists():
+                name = f"{base_name}_42_{counter}"
+                counter += 1
+            
+            # Récupérer l'URL de l'avatar (simplifié)
+            avatar_url = None
+            try:
+                if 'image' in user_data and user_data['image'] and 'versions' in user_data['image']:
+                    avatar_url = user_data['image']['versions'].get('medium')
+            except:
+                pass
+            
+            # Stocker dans la session
+            request.session['oauth_42_data'] = {
+                'forty_two_id': forty_two_id,
+                'name': name,
+                'avatar_url': avatar_url
+            }
+            
+            return Response({
+                "code": 1000,
+                "next_step": "choose_password",
+                "redirect_url": "/register/42/complete"
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {"code": 1052, "message": f"Erreur OAuth: {str(e)}"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+@method_decorator(csrf_exempt, name='dispatch')
+class Auth42CompleteView(generics.CreateAPIView):
+    serializer_class = serializers.Auth42CompleteSerializer
+    permission_classes = [AllowAny]

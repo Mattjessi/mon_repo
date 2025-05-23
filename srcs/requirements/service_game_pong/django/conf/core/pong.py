@@ -20,7 +20,7 @@ async def game_pong(game_id, consumer):
     score_player_1 = consumer.c_scorep1.get(consumer.match_id, 0)
     score_player_2 = consumer.c_scorep2.get(consumer.match_id, 0)
     
-    ball_speed = consumer.c_ball_speed.get(consumer.match_id, 4)
+    ball_speed = 0.2
 
     # Utiliser les dimensions dynamiques
     CANVAS_WIDTH = game.canvas_width
@@ -50,6 +50,7 @@ async def game_pong(game_id, consumer):
     if (ball_x <= PADDLE_WIDTH + BALL_RADIUS and
         paddle_l_position <= ball_y <= paddle_l_position + PADDLE_HEIGHT):
         ball_dx = -ball_dx
+        ball_speed += 0.05
         # Calculer où la balle a frappé la raquette (de 0 à 1)
         relative_intersect_y = (ball_y - paddle_l_position) / PADDLE_HEIGHT
         # Convertir en angle entre -30 et 30 degrés
@@ -61,11 +62,11 @@ async def game_pong(game_id, consumer):
         # Calculer la nouvelle direction
         ball_dx = math.cos(bounce_angle_rad)
         ball_dy = -math.sin(bounce_angle_rad)
-        ball_speed += 5
         
     elif (ball_x >= CANVAS_WIDTH - PADDLE_WIDTH - BALL_RADIUS and
           paddle_r_position <= ball_y <= paddle_r_position + PADDLE_HEIGHT):
         ball_dx = -ball_dx
+        ball_speed += 0.05
         # Calculer où la balle a frappé la raquette (de 0 à 1)
         relative_intersect_y = (ball_y - paddle_r_position) / PADDLE_HEIGHT
         # Convertir en angle entre -30 et 30 degrés
@@ -77,11 +78,10 @@ async def game_pong(game_id, consumer):
         # Calculer la nouvelle direction
         ball_dx = -math.cos(bounce_angle_rad)
         ball_dy = -math.sin(bounce_angle_rad)
-        ball_speed += 5
 
     # Balle sort du terrain (point marqué)
     if ball_x < 0 or ball_x > CANVAS_WIDTH:
-        ball_speed = 4
+        ball_speed = 0.2
         if ball_x > CANVAS_WIDTH:
             score_player_1 += 1
         elif ball_x < 0:
@@ -92,6 +92,15 @@ async def game_pong(game_id, consumer):
         ball_y = CANVAS_HEIGHT // 2
         ball_dx = random.choice([1, -1])
         ball_dy = random.choice([0.2, -0.2, 0])
+        ball_speed = 0.2
+        await consumer.channel_layer.group_send(
+            consumer.room_group_name,
+            {
+                "type": "score_update",
+                "score_Player_1": score_player_1,
+                "score_Player_2": score_player_2,
+            }
+        )
 
     # Mettre à jour les variables temporaires
     consumer.c_ballx[consumer.match_id] = ball_x
