@@ -59,7 +59,6 @@ function Complete() {
                     throw new Error("Réponse invalide du serveur")
                 }
             } catch (error) {
-                console.error("Erreur lors du traitement du code:", error)
                 setCode(error.response?.data?.code || 1053)
                 setShow(true)
             } finally {
@@ -99,7 +98,6 @@ function Complete() {
                 password: password1,
                 password2: password2
             })
-            
             if (response.data.code === 1000) {
                 // Récupérer le nom du joueur
                 setPlayerName(response.data.name || '')
@@ -109,14 +107,14 @@ function Complete() {
                 setShowPasswordForm(false)
             }
         } catch (error) {
-            console.error("Erreur:", error)
+			console.log(error)
             setPassword1("")
             setPassword2("")
             
             if (error.response?.data?.code)
                 setCode(error.response.data.code)
             else
-                setCode(1009)
+                setCode(1010)
                 
             setShow(true)
         } finally {

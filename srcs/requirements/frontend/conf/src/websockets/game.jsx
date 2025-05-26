@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { useNavigate } from "react-router-dom"
 import axiosInstance from '../auth/instance'
+import axios from 'axios'
 
 const GameContext = createContext(null)
 
@@ -26,7 +27,7 @@ export const Game = ({ children }) => {
 			const tokens = await axiosInstance.post('/users/api/token/refresh/', { refresh: Rtoken })
 			const ws = new WebSocket(`${url}?token=${tokens.data.access}`)
 
-			ws.onopen = () => {console.log("GameSocket connected")}
+			ws.onopen = () => {}
 			ws.onmessage = (event) => {
 				const data = JSON.parse(event.data)
 				onMessage?.(data)
@@ -38,27 +39,24 @@ export const Game = ({ children }) => {
 
 		const initGameSocket = async () => {
 			try {
+				const containerStatus = await axios.get(`https://${location.host}/pong/api/status/`)
+				if (containerStatus.data.code != 1000) return
 				const ws = await createGameSocket(url, Rtoken, (data) => {
 				if (data.type == "data_pong") setPongMessages((prev) => [...prev, data])
 				else if (data.type == "score_update") setScoreMessages(data)
 				else if (data.type) setMessages((prev) => [...prev, data])
-				else console.log(data)
-				}, (error) => {
-					console.error("GameSocket error", error)
-					navigate("/home")
-				}, () => {
+				}, (error) => {navigate("/home")}, () => {
 					setUrl("")
 					setMessages([])
 					setPongMessages([])
 					setScoreMessages([])
-					console.log("GameSocket closed")
 				})
 				if (isMounted) {
 					socketRef.current = ws
 					wsInstance = ws
 				}
 			}
-			catch(error) {console.log("Failed to create GameSocket: ", error)}
+			catch {}
 		}
 
 		initGameSocket()

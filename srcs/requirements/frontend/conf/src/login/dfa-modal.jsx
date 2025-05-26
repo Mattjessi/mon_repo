@@ -26,10 +26,7 @@ function DFAModal({ show, hide, username, password }) {
 				navigate("/home")
 			}
 		}
-		catch (error) {
-			console.log(error)
-			hide()
-		}
+		catch {hide()}
 	}
 
 	return (

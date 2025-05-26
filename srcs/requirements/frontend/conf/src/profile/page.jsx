@@ -25,9 +25,7 @@ function ProfilePage({ user }) {
 				if (data.length == 1)
 					setProfile(data[0])
 			}
-			catch(error) {
-				console.log(error)
-			}
+			catch {}
 		}
 		checkURL()
 	}, [location.pathname])

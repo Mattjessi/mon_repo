@@ -32,11 +32,9 @@ function Register() {
 				password: password1,
 				password2: password2
 			})
-			console.log(response.data)
 			if (response.data.code == 1000) navigate("/")
 		}
 		catch (error) {
-			console.log(error)
 			setUsername("")
 			setPassword1("")
 			setPassword2("")

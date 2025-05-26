@@ -9,4 +9,5 @@ urlpatterns = [
     path('private/send/<int:receiver_player_id>/', views.PrivateMessageSendView.as_view(), name='private-message-send'),
     path('private/list/', views.PrivateMessageListView.as_view(), name='private-message-list'),
 
+    path('api/status/', views.StatusApi.as_view(), name='status'),
 ]

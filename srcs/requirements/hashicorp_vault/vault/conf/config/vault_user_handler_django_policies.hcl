@@ -37,3 +37,11 @@ path "secret/user_handler/django/django_super_user_password" {
 path "secret/user_handler/django/django_super_user_email" {
 	capabilities = ["read"]
 }
+
+path "secret/user_handler/django/auth_42_key" {
+	capabilities = ["read"]
+}
+
+path "secret/user_handler/django/auth_42_secret" {
+	capabilities = ["read"]
+}

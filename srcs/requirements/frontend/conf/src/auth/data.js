@@ -10,9 +10,7 @@ const refreshData = async () => {
 		if (response.data)
 			localStorage.setItem("data", JSON.stringify(response.data))
 	}
-	catch(error) {
-		console.log(error)
-	}
+	catch {}
 }
 
 const getData = () => {
@@ -20,10 +18,7 @@ const getData = () => {
 		const rawData = localStorage.getItem("data")
 		return rawData ? JSON.parse(rawData) : null
 	}
-	catch(error) {
-		console.log(error)
-		return null
-	}
+	catch {return null}
 }
 
 const removeData = () => {

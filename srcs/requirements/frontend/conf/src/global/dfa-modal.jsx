@@ -12,27 +12,22 @@ function DFAModal({ show, hide, handleClose }) {
 	const fonction = async () => {
 		try {
 			const response = await axiosInstance.put("/users/api/2fa-enable/")
-			console.log(response)
 			if (response.data.code == "1000")
 				setQrCode(response.data.qr_code_image)
 		}
-		catch(error) {console.log(error)}
+		catch {}
 	}
 
 	const fonction2 = async (code) => {
 		try {
 			const response = await axiosInstance.put("/users/api/2fa-enable/", {otp_code: code})
-			console.log(response)
 			if (response.data.code == "1000") {
 				refreshUser()
 				hide()
 				handleClose()
 			}
 		}
-		catch(error) {
-			console.log(error)
-			hide()
-		}
+		catch {hide()}
 	}
 
 	useEffect(() => {

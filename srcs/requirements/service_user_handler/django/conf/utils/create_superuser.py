@@ -5,11 +5,11 @@ import hvac
 from django.core.management import call_command
 from django.contrib.auth import get_user_model
 
-# Extraction du token
-with open('./user_handler_django/user_handler_django', 'r') as file:
+# Token extract
+with open('/django_web_app/user_handler_django/user_handler_django', 'r') as file:
     vault_token = file.read().strip()
 
-# Initialisation du client Vault
+# Vault client create
 client = hvac.Client(url='http://vault:8200', token=vault_token)
 
 if not client.is_authenticated():
@@ -23,42 +23,36 @@ keys = [
 
 secrets = {}
 
-# Récupération des secrets depuis Vault et extraction des valeurs spécifiques
+# Vault secrets recover
 for key in keys:
     response = client.secrets.kv.v1.read_secret(path=f'user_handler/django/{key}')
     secrets[key] = response['data'].get(key)
 
-# Préparation du contexte Django
+# Django prepare context
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'django_user_handler.settings')
 django.setup()
 
-# Récupération des variables d'environnement
+# Secrets recover
 username = secrets['django_super_user_name']
 email = secrets['django_super_user_email']
 password = secrets['django_super_user_password']
 
 if not all([username, email, password]):
-    print("Veuillez définir SUPER_USER_NAME, SUPER_USER_EMAIL et SUPER_USER_PASSWORD dans l'environnement.")
+    print("Please define SUPER_USER_NAME, SUPER_USER_EMAIL and SUPER_USER_PASSWORD secrets.")
     sys.exit(1)
 
 # Vérifier si le superutilisateur existe
 User = get_user_model()
 if User.objects.filter(username=username).exists():
-    print(f"Le superutilisateur '{username}' existe déjà.")
+    print(f"Super '{username}' already exist.")
     sys.exit(0)
 
-# Créer le superuser
-print(f"Création du superutilisateur '{username}'...")
-call_command('createsuperuser',
-             username=username,
-             email=email,
-             interactive=False)
+# Superuser create
+call_command('createsuperuser', username=username, email=email, interactive=False)
 
-# Définir le mot de passe (car --noinput ne le fait pas)
+# Password define
 user = User.objects.get(username=username)
 user.set_password(password)
 user.save()
-
-print(f"Superutilisateur '{username}' créé avec succès.")

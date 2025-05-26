@@ -22,9 +22,7 @@ function JoinMatch({ state, setState, setType }) {
 				.map(player => ({name: player.from_player.name, id: player.id, avatar: getAvatar(player.from_player.name)}))
 			setData(a)
 		}
-		catch(error) {
-			console.log(error)
-		}
+		catch {}
 	}
 
 	const accept = async (id) => {
@@ -33,10 +31,7 @@ function JoinMatch({ state, setState, setType }) {
 			setType("paddle_r")
 			setState("wait")
 		}
-		catch(error) {
-			console.log(error)
-			setState("")
-		}
+		catch {setState("")}
 	}
 
 	const decline = async (id) => {
@@ -44,10 +39,7 @@ function JoinMatch({ state, setState, setType }) {
 			await axiosInstance.put(`pong/invitations/${id}/decline/`)
 			setState("")
 		}
-		catch(error) {
-			console.log(error)
-			setState("")
-		}
+		catch {setState("")}
 	}
 
 	useEffect(() => {

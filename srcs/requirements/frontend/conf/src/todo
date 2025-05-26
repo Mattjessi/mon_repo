@@ -1,0 +1,8 @@
+ - Mode Online + Tournoi = Forfait des le debut
+ - Ajoutez 2 heures sur l'historique
+ - Autoriser les messages direct sur tout le monde
+ - Profile introuvable sur l'url
+ - Reset le score
+ - Rajouter player system pour les messages de games
+ - Verif l'auth pendant la game
+ - redirect online -> tournoi et inversement

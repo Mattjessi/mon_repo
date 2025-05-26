@@ -35,7 +35,7 @@ function JoinMatch({ state, setState, setType }) {
 					players: getPlayers(tourn.player_1, tourn.player_2, tourn.player_3, tourn.player_4)}))
 			setData(a)
 		}
-		catch(error) {console.log(error)}
+		catch {}
 	}
 
 	const join = async (id) => {
@@ -45,10 +45,7 @@ function JoinMatch({ state, setState, setType }) {
 			setType("invited")
 			setState("wait")
 		}
-		catch(error) {
-			console.log(error)
-			fonction()
-		}
+		catch {fonction()}
 	}
 
 	useEffect(() => {

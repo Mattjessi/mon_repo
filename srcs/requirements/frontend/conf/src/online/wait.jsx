@@ -27,9 +27,7 @@ function WaitMatch({ setState }) {
 			await axiosInstance.put(`/pong/invitations/${a.id}/cancel/`)
 			setState("")
 		}
-		catch(error) {
-			console.log(error)
-		}
+		catch {}
 	}
 
 	const getFriend = async () => {
@@ -40,9 +38,7 @@ function WaitMatch({ setState }) {
 			setFriend({name: a.name, avatar: a.avatar})
 			setReady(true)
 		}
-		catch(error) {
-			console.log(error)
-		}
+		catch {}
 	}
 
 	useEffect(() => {

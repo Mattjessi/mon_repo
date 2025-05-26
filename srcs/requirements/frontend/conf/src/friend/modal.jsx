@@ -16,16 +16,16 @@ function FriendModal({ friend, setFriend }) {
 			<Modal.Body>
 				<Tabs activeKey={tab} onSelect={setTab} fill>
 					<Tab eventKey="friendlist" title="Friend List">
-						<ListModal tab={ tab }/>
+						<ListModal tab={ tab } handleClose={ handleClose }/>
 					</Tab>
 					<Tab eventKey="addfriend" title="Add Friend">
-						<SearchModal tab={ tab }/>
+						<SearchModal tab={ tab } handleClose={ handleClose }/>
 					</Tab>
 					<Tab eventKey="friendrequest" title="Friend Request">
-						<RequestModal tab={ tab }/>
+						<RequestModal tab={ tab } handleClose={ handleClose }/>
 					</Tab>
 					<Tab eventKey="blocklist" title="Block List">
-						<BlockModal tab={ tab }/>
+						<BlockModal tab={ tab } handleClose={ handleClose }/>
 					</Tab>
     			</Tabs>
 			</Modal.Body>

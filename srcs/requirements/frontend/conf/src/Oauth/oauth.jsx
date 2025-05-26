@@ -16,7 +16,6 @@ function OauthRegister() {
         setIsLoading(true)
         try {
             const response = await axiosInstance.get('/users/api/auth-42/register/')
-            console.log("Réponse:", response.data)
             
             if (response.data.code === 1000 && response.data.redirect_url) {
                 window.location.href = response.data.redirect_url
@@ -24,7 +23,6 @@ function OauthRegister() {
                 throw new Error("Réponse invalide du serveur")
             }
         } catch (error) {
-            console.error("Erreur:", error)
             setCode(error.response?.data?.code || 1009)
             setShow(true)
         } finally {

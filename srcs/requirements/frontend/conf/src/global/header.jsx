@@ -19,13 +19,13 @@ function Header({ user, state, setState }) {
 	if (!user) return (<></>)
 
 	const goTo = (string) => {
-		if (state && state == "play")
+		if (state && (state == "play" || state == "playfinal"))
 			closeSocket()
 		navigate(string)
 	}
 
 	const setTo = (string) => {
-		if (state && state == "play") {
+		if (state && (state == "play" || state == "playfinal")) {
 			closeSocket()
 			setState("")
 		}

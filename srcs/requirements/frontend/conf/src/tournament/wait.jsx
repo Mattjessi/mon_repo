@@ -5,7 +5,7 @@ import { useGame } from "../websockets/game"
 import axiosInstance from "../auth/instance"
 import { useAuth } from "../auth/context"
 
-function WaitMatch({ setState, type, setType }) {
+function WaitMatch({ setState, setType }) {
 
 	const { NotifMessages, setNotifMessages } = useNotification()
 	const { setUrl } = useGame()
@@ -49,22 +49,40 @@ function WaitMatch({ setState, type, setType }) {
 				p4: {name: getName(a.player_4), avatar: getAvatar(a.player_4)},
 				players: getPlayers(a.player_1, a.player_2, a.player_3, a.player_4)})
 		}
-		catch(error) {console.log(error)}
+		catch {}
+	}
+
+	const startGame = async (message) => {
+		try {
+			if (data.p1.name == user.name) {
+				const idData = await axiosInstance.get("/pong/tournament/get-id/")
+				let a
+				if (idData.data.tournament_id) {
+					a = await axiosInstance.get(`/pong/tournaments/${idData.data.tournament_id}/struct/`)
+					await axiosInstance.post("/live_chat/general/send/", {content: `A tournament has started ! Semi-final-1 : ${a.data.matches[0].player_1} vs ${a.data.matches[0].player_2}, Semi-final-2: ${a.data.matches[1].player_1} vs ${a.data.matches[1].player_2}`})
+				}
+			}
+		}
+		catch {} 
+		finally {
+			if (message.player_1 == user.name) setType("paddle_l")
+			else if (message.player_2 == user.name) setType("paddle_r")
+			setUrl(message.ws_url)
+			setNotifMessages([])
+			setState("play")
+		}
 	}
 
 	const play = async (id) => {
 		if (ready == false) return
-		try {
-			const response = await axiosInstance.put(`/pong/tournament/${id}/start/`)
-			console.log(response)
-		}
-		catch(error) {console.log(error)}
+		try {const response = await axiosInstance.put(`/pong/tournament/${id}/start/`)}
+		catch {}
 	}
 
 
 	const cancel = async (id) => {
 		try {await axiosInstance.delete(`/pong/tournament/${id}/cancel/`)}
-		catch(error) {console.log(error)}
+		catch {}
 	}
 
 	const leave = async (id) => {
@@ -73,7 +91,7 @@ function WaitMatch({ setState, type, setType }) {
 			setType("")
 			setState("")
 		}
-		catch(error) {console.log(error)}
+		catch {}
 	}
 
 	useEffect(() => {
@@ -83,18 +101,12 @@ function WaitMatch({ setState, type, setType }) {
 			setState("")
 			setType("")
 		}
-		if (NotifMessages.type == "match_created") {
-			console.log(NotifMessages)
-			if (NotifMessages.player_1 == user.name) setType("paddle_l")
-			else if (NotifMessages.player_2 == user.name) setType("paddle_r")
-			setUrl(NotifMessages.ws_url)
-			setNotifMessages([])
-			setState("play")
-		}
+		if (NotifMessages.type == "match_created")
+			startGame(NotifMessages)
 	}, [NotifMessages])
 
 	useEffect(() => {
-		if (data && data.players == 4)
+		if (data && data.players == 4 && data.p1.name == user.name)
 			setReady(true)
 		else
 			setReady(false)

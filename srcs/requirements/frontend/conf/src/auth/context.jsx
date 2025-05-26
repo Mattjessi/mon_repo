@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { refreshData, getData, removeData } from './data.js'
-import { refreshAtoken } from './instance'
+import axiosInstance, { refreshAtoken } from './instance'
 import { useLocation } from "react-router-dom"
 
 export const AuthContext = createContext()
@@ -19,10 +19,17 @@ export const AuthProvider = ({ children }) => {
 			const expiryTime = payload.exp * 1000
 			return Date.now() >= expiryTime
 		}
-		catch(error) {
-			console.log(error)
+		catch(error) {return true}
+	}
+
+	const isTokenInvalid = async (Atoken, Rtoken) => {
+		if (!Atoken || !Rtoken) return true
+		try {
+			const tokens = await axiosInstance.post('/users/api/token/refresh/', { refresh: Rtoken })
+			if (Atoken == tokens.data.access) return false
 			return true
 		}
+		catch {return true}
 	}
 
 	const checkAuth = async () => {
@@ -30,6 +37,7 @@ export const AuthProvider = ({ children }) => {
 		const Rtoken = localStorage.getItem('Rtoken')
 		if (!Atoken || !Rtoken) return false
 		if (isTokenExpired(Atoken)) return await refreshAtoken(Rtoken)
+		//if (isTokenInvalid(Atoken, Rtoken)) return false
 		return true
 	}
 
@@ -49,10 +57,7 @@ export const AuthProvider = ({ children }) => {
 			const updatedUser = await getData()
 			setUser(updatedUser)
 		}
-		catch (error) {
-			console.error(error)
-			logout()
-		}
+		catch (error) {logout()}
 	}
 
 	const logout = () => {
@@ -68,9 +73,7 @@ export const AuthProvider = ({ children }) => {
 			try {
 				await refreshUser()
 			}
-			catch(error) {
-				console.log(error)
-			}
+			catch {}
 			finally {
 				setLoading(false)
 			}

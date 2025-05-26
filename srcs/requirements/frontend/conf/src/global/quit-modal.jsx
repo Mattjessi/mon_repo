@@ -24,10 +24,7 @@ function QuitModal({ quit, setQuit }) {
 				navigate("/")
 			}
 		}
-		catch (error) {
-			console.log(error)
-			handleClose()
-		}
+		catch {handleClose()}
 	}
 
 	return (

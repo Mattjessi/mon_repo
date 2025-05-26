@@ -123,7 +123,7 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=30),  # Durée de vie de l’access token
+    'ACCESS_TOKEN_LIFETIME': timedelta(seconds=10),  # Durée de vie de l’access token
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),    # Durée de vie du refresh token
     'BLACKLIST_AFTER_ROTATION': True,               # Active le blacklisting après rotation
     'TOKEN_BACKEND': 'rest_framework_simplejwt.token_blacklist.backends.BlacklistBackend',  # Backend pour blacklist

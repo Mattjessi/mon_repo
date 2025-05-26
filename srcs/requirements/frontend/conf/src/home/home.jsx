@@ -1,14 +1,23 @@
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { Card } from "react-bootstrap"
+import { useGame } from "../websockets/game"
 
 function Home() {
 
 	const navigate = useNavigate()
+
+	const { getSocket, closeSocket } = useGame()
+	const socket = getSocket()
   
 	const cardData = [
 		{ src: "Online.svg", title: "Online", path: "/online" },
 		{ src: "Crown.svg", title: "Tournament", path: "/tournament" }]
+
+	useEffect(() => {
+		if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING))
+			closeSocket()
+	}, [])
 		
 	function CardItem({ card }) {
 	

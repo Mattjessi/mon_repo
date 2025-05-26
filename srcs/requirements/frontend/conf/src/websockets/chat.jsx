@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { useNavigate } from "react-router-dom"
 import { useAuth } from '../auth/context'
 import axiosInstance from '../auth/instance'
+import axios from 'axios'
 
 const ChatContext = createContext(null)
 
@@ -25,7 +26,7 @@ export const Chat = ({ children }) => {
 			const tokens = await axiosInstance.post('/users/api/token/refresh/', { refresh: Rtoken })
 			const ws = new WebSocket(`wss://${location.host}/live_chat/ws/chat/general/?token=${tokens.data.access}`)
 
-			ws.onopen = () => {console.log("ChatSocket connected")}
+			ws.onopen = () => {}
 			ws.onmessage = (event) => {
 				const data = JSON.parse(event.data)
 				onMessage?.(data)
@@ -37,23 +38,18 @@ export const Chat = ({ children }) => {
 
 		const initChatSocket = async () => {
 			try {
+				const containerStatus = await axios.get(`https://${location.host}/live_chat/api/status/`)
+				if (containerStatus.data.code != 1000) return
 				const ws = await createChatSocket(Rtoken, (data) => {
 					if (data && data.code == 1000) return
-					console.log("Chat notif => ", data)
 					setMessages(data)
-				}, (error) => {
-					console.error("ChatSocket error", error)
-					navigate("/home")
-				}, () => {
-					setMessages([])
-					console.log("ChatSocket closed")
-				})
+				}, (error) => {navigate("/home")}, () => {setMessages([])})
 				if (isMounted) {
 					socketRef.current = ws
 					wsInstance = ws
 				}
 			}
-			catch(error) {console.log("Failed to create ChatSocket: ", error)}
+			catch {}
 		}
 
 		initChatSocket()

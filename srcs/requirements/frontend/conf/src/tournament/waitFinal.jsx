@@ -1,18 +1,23 @@
-import React, { useEffect, useState } from "react"
-import { Button, Spinner } from "react-bootstrap"
+import React, { useEffect } from "react"
+import { Spinner } from "react-bootstrap"
 import { useAuth } from "../auth/context"
 import { useNotification } from "../websockets/notification"
-import { useGame } from "../websockets/game"
 import axiosInstance from "../auth/instance"
+import { useGame } from "../websockets/game"
 
-function WaitFinal({ setState }) {
+function WaitFinal({ setState, setType }) {
 
 	const { user } = useAuth()
+	const { setUrl } = useGame()
 	const { NotifMessages } = useNotification()
-	const [ready, setReady] = useState(false)
 
 	useEffect(() => {
-
+		if (NotifMessages.type == "match_created") {
+			if (NotifMessages.player_1 == user.name) setType("paddle_l")
+			else if (NotifMessages.player_2 == user.name) setType("paddle_r")
+			setUrl(NotifMessages.ws_url)
+			setState("playfinal")
+		}
 	}, [NotifMessages])
 
 	return (
@@ -22,18 +27,8 @@ function WaitFinal({ setState }) {
 				<div className="d-flex flex-column align-items-center">
 					<img src={user.avatar} className="mb-1" style={{ width: '80px', height: '80px', borderRadius: '50%' }}/>
 					<div className="text-white mb-3">{user.name}</div>
-					{ready ? (
-					<>
-						<img src={friend.avatar} className="mb-1" style={{ width: '80px', height: '80px', borderRadius: '50%' }}/>
-						<div className="text-white mb-3">{friend.name}</div>
-						<Button type="button" className="btn btn-secondary rounded fw-bolder mt-3" onClick={() => play()}>Play</Button>
-					</> ) : (
-					<>
 						<Spinner animation="border" style={{ width: '3rem', height: '3rem' }} className="mb-2"/>
-						<div className="text-white mb-3">...</div>
-						<Button type="button" className="btn btn-secondary rounded fw-bolder mt-3" onClick={() => cancel()}>Cancel</Button>
-					</> )}
-					
+					<div className="text-white mb-3">...</div>
 				</div>
 			</div>
 		</div>

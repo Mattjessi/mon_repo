@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react"
 import { useAuth } from "../auth/context"
 import axiosInstance from '../auth/instance'
 
-function RequestModal({ tab }) {
+function RequestModal({ tab, handleClose }) {
 
 	const { user } = useAuth()
 	const [data, setData] = useState([])
@@ -24,33 +24,31 @@ function RequestModal({ tab }) {
 				.filter(friend => friend.status == "pending")
 				.map(friend => ({
 					id: friend.id,
-					avatar: getAvatar(friend.player_1 == user.name ? friend.player_1 : friend.player_2 ),
+					avatar: getAvatar(friend.player_1 == user.name ? friend.player_2 : friend.player_1 ),
 					sender: friend.player_1,
 					receiver: friend.player_2}))
 
 			setData(a)
 			setFilteredFriends(a)
 		}
-		catch(error) {
-			console.log(error)
-		}
+		catch {handleClose()}
 	}
 
 	const cancelRequest = async (playerID) => {
 		try {await axiosInstance.delete(`/users/api/friend-request/cancel/${playerID}/`)}
-		catch(error) {console.log(error)}
+		catch {handleClose()}
 		finally {list()}
 	}
 
 	const acceptRequest = async (playerID) => {
 		try {await axiosInstance.put(`/users/api/friend-request/accept/${playerID}/`, { player_2: playerID })}
-		catch(error) {console.log(error)}
+		catch {handleClose()}
 		finally {list()}
 	}
 
 	const rejectRequest = async (playerID) => {
 		try {await axiosInstance.delete(`/users/api/friend-request/reject/${playerID}/`)}
-		catch(error) {console.log(error)}
+		catch {handleClose()}
 		finally {list()}
 	}
 

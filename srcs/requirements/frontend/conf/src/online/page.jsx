@@ -22,14 +22,17 @@ function Online({ user }) {
 			const a = matchData.data
 				.filter(match => match.status == "En cours" && (match.player_1.name == user.name || match.player_2.name == user.name))
 			if (a.length) {
-				setNotifMessages({
-					type: "match_created",
-					player_1: a[0].player_1.name,
-					player_2: a[0].player_2.name,
-					ws_url: a[0].url.ws_url})
-				if (a[0].player_1.name == user.name) setType("paddle_l")
-				else if (a[0].player_2.name == user.name) setType("paddle_r")
-				setState("wait")
+				if (a[a.length - 1].player_1 != undefined && a[a.length - 1].player_2 != undefined &&
+					a[a.length - 1].player_1.name != undefined && a[a.length - 1].player_2.name != undefined) {
+					setNotifMessages({
+						type: "match_created",
+						player_1: a[a.length - 1].player_1.name,
+						player_2: a[a.length - 1].player_2.name,
+						ws_url: a[a.length - 1].url.ws_url})
+					if (a[a.length - 1].player_1.name == user.name) setType("paddle_l")
+					else if (a[a.length - 1].player_2.name == user.name) setType("paddle_r")
+					setState("wait")
+				}
 			}
 			const b = inviteData.data.find(invite => invite.status == "En attente" && invite.from_player.name == user.name)
 			if (b) {
@@ -37,9 +40,7 @@ function Online({ user }) {
 				setState("wait")
 			}
 		}
-		catch(error) {
-			console.log(error)
-		}
+		catch {}
 	}
 
 	useEffect(() => {
@@ -60,7 +61,6 @@ function Online({ user }) {
 						<div className="d-flex flex-column gap-3">
 							<Button type="button" className="btn btn-secondary rounded fw-bolder" onClick={() => setState("invite")}>Invite</Button>
 							<Button type="button" className="btn btn-secondary rounded fw-bolder" onClick={() => setState("join")}>Join</Button>
-							<Button type="button" className="btn btn-secondary rounded fw-bolder" onClick={() => setState("play")}>Play</Button>
 						</div>
 					</div>
 				</div> : <></>}

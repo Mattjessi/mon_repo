@@ -43,7 +43,6 @@ function Login() {
 			}
 		}
 		catch (error) {
-			console.log(error)
 			if (error.response.data.code == "1037") {
 				if (username && password)
 					setdfaShow(true)

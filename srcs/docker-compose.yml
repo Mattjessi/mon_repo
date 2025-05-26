@@ -7,6 +7,7 @@ services:
       dockerfile: Dockerfile
     ports:
       - "4343:443"
+      - "8080:80"
     container_name: nginx
     env_file: ./env/.env_nginx
     init: true
@@ -48,9 +49,9 @@ services:
       context: ./requirements/service_user_handler/django
       dockerfile: Dockerfile
     container_name: service_user_handler_django
-    env_file:
-      - ./env/.env_nginx
-      - ./env/.env_service_user_handler_django
+    environment:
+      - DJANGO_SETTINGS_MODULE=django_user_handler.settings
+    env_file: ./env/.env_nginx
     init: true
     restart: always
     networks:
@@ -85,9 +86,9 @@ services:
       context: ./requirements/service_game_pong/django
       dockerfile: Dockerfile
     container_name: service_game_pong_django
-    env_file:
-      - ./env/.env_nginx
-      - ./env/.env_service_game_pong_django
+    environment:
+      - DJANGO_SETTINGS_MODULE=django_game_pong.settings
+    env_file: ./env/.env_nginx
     init: true
     restart: always
     networks:
@@ -121,9 +122,9 @@ services:
       context: ./requirements/service_live_chat/django
       dockerfile: Dockerfile
     container_name: service_live_chat_django
-    env_file:
-      - ./env/.env_nginx
-      - ./env/.env_service_live_chat_django
+    environment:
+      - DJANGO_SETTINGS_MODULE=django_live_chat.settings
+    env_file: ./env/.env_nginx
     init: true
     restart: always
     networks:

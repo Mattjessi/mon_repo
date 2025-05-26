@@ -3,7 +3,7 @@
 
 #Check if vault_secrets container is up
 
-until [ "docker inspect vault_secrets | jq -r '.[0].State.Running'" != "true" ] > /dev/null; do
+until [ "$(docker inspect vault_secrets | jq -r '.[0].State.Running')" = "true" ] > /dev/null; do
 	sleep 1
 done
 
@@ -46,6 +46,8 @@ USER_HANDLER_SECRET_KEY=$(jq -r ".service_user_handler_django.SECRET_KEY" $SECRE
 USER_HANDLER_SUPER_USER_NAME=$(jq -r ".service_user_handler_django.SUPER_USER_NAME" $SECRETS_PATH)
 USER_HANDLER_SUPER_USER_PASSWORD=$(jq -r ".service_user_handler_django.SUPER_USER_PASSWORD" $SECRETS_PATH)
 USER_HANDLER_SUPER_USER_EMAIL=$(jq -r ".service_user_handler_django.SUPER_USER_EMAIL" $SECRETS_PATH)
+USER_HANDLER_AUTH_42_KEY=$(jq -r ".service_user_handler_django.AUTH_42_KEY" $SECRETS_PATH)
+USER_HANDLER_AUTH_42_SECRET=$(jq -r ".service_user_handler_django.AUTH_42_SECRET" $SECRETS_PATH)
 USER_HANDLER_POSTGRES_HOST=$(jq -r ".service_user_handler_postgres.POSTGRES_HOST" $SECRETS_PATH)
 USER_HANDLER_POSTGRES_PORT=$(jq -r ".service_user_handler_postgres.POSTGRES_PORT" $SECRETS_PATH)
 USER_HANDLER_POSTGRES_DB=$(jq -r ".service_user_handler_postgres.POSTGRES_DB" $SECRETS_PATH)
@@ -86,6 +88,8 @@ $CMD_KV_PUT secret/user_handler/django/django_secret_key django_secret_key=$USER
 $CMD_KV_PUT secret/user_handler/django/django_super_user_name django_super_user_name=$USER_HANDLER_SUPER_USER_NAME > /dev/null
 $CMD_KV_PUT secret/user_handler/django/django_super_user_password django_super_user_password=$USER_HANDLER_SUPER_USER_PASSWORD > /dev/null
 $CMD_KV_PUT secret/user_handler/django/django_super_user_email django_super_user_email=$USER_HANDLER_SUPER_USER_EMAIL > /dev/null
+$CMD_KV_PUT secret/user_handler/django/auth_42_key auth_42_key=$USER_HANDLER_AUTH_42_KEY > /dev/null
+$CMD_KV_PUT secret/user_handler/django/auth_42_secret auth_42_secret=$USER_HANDLER_AUTH_42_SECRET > /dev/null
 
 $CMD_KV_PUT secret/user_handler/postgres/postgres_database_name postgres_database_name=$USER_HANDLER_POSTGRES_DB > /dev/null
 $CMD_KV_PUT secret/user_handler/postgres/postgres_user postgres_user=$USER_HANDLER_POSTGRES_USER > /dev/null

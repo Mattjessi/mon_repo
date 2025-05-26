@@ -1,6 +1,7 @@
 from rest_framework import generics
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.exceptions import ValidationError
+from rest_framework.views import APIView
 from .models import PrivateMessage, GeneralMessage
 from .serializers import PrivateMessageSerializer, GeneralMessageSerializer
 from channels.layers import get_channel_layer
@@ -11,6 +12,12 @@ from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 
+@method_decorator(csrf_exempt, name='dispatch')
+class StatusApi(APIView):
+    permission_classes = [AllowAny]
+    def get(self, request):
+        return Response({"code": 1000})
+    
 @method_decorator(csrf_exempt, name='dispatch')
 class GeneralMessageListView(generics.ListAPIView):
     serializer_class = GeneralMessageSerializer

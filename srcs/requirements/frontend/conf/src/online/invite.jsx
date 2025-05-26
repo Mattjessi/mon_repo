@@ -18,9 +18,7 @@ function InviteMatch({ state, setState, setType }) {
 				.filter(player => ({name: player.name, id: player.id, avatar: player.avatar}))
 			setData(a)
 		}
-		catch(error) {
-			console.log(error)
-		}
+		catch {}
 	}
 
 	const invite = async (id) => {
@@ -34,9 +32,7 @@ function InviteMatch({ state, setState, setType }) {
 			setType("paddle_l")
 			setState("wait")
 		}
-		catch(error) {
-			console.log(error)
-		}
+		catch {}
 	}
 
 	useEffect(() => {

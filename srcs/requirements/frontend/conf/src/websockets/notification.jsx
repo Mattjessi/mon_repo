@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { useNavigate } from "react-router-dom"
-import axiosInstance from '../auth/instance'
 import { useAuth } from "../auth/context.jsx"
+import axiosInstance from '../auth/instance'
+import axios from 'axios'
 
 const NotificationContext = createContext(null)
 
@@ -25,7 +26,7 @@ export const Notification = ({ children }) => {
 			const tokens = await axiosInstance.post('/users/api/token/refresh/', { refresh: Rtoken })
 			const ws = new WebSocket(`wss://${location.host}/pong/ws/notifications/?token=${tokens.data.access}`)
 			
-			ws.onopen = () => {console.log("NotifSocket connected")}
+			ws.onopen = () => {}
 			ws.onmessage = (event) => {
 				const data = JSON.parse(event.data)
 				onMessage?.(data)
@@ -37,28 +38,22 @@ export const Notification = ({ children }) => {
 
 		const initNotifSocket = async () => {
 			try {
+				const containerStatus = await axios.get(`https://${location.host}/users/api/status/`)
+				if (containerStatus.data.code != 1000) return
 				const ws = await createNotifSocket(Rtoken, (data) => {
-					if (data.type == "invitation_declined") setNotifMessages(data) //console.log(`${data.to_player} declined your invitation.`)
-					else if (data.type == "invitation_received") console.log(`${data.from_player} invited you.`)
-					else if (data.type == "match_created") setNotifMessages(data) //console.log(`Match [${data.match_id}] has been created.`)
-					else if (data.type == "player_joined") setNotifMessages(data) //console.log(`Player [${data.joined_player}] has joined.`)
-					else if (data.type == "player_leave") setNotifMessages(data) //console.log(`Player [${data.leaved_player}] has left.`)
+					if (data.type == "invitation_declined") setNotifMessages(data)
+					else if (data.type == "match_created") setNotifMessages(data)
+					else if (data.type == "player_joined") setNotifMessages(data)
+					else if (data.type == "player_leave") setNotifMessages(data)
 					else if (data.type == "tournament_created") setNotifMessages(data)
 					else if (data.type == "tournament_cancelled") setNotifMessages(data)
-					else console.log(data)
-				}, (error) => {
-					console.error("NotifSocket error", error)
-					navigate("/home")
-				}, () => {
-					setNotifMessages([])
-					console.log("NotifSocket closed")
-				})
+				}, (error) => {navigate("/home")}, () => {setNotifMessages([])})
 				if (isMounted) {
 					socketRef.current = ws
 					wsInstance = ws
 				}
 			}
-			catch(error) {console.log("Failed to create NotifSocket: ", error)}
+			catch {}
 		}
 
 		initNotifSocket()

@@ -52,7 +52,6 @@ function WinnerModal({ winnerName, show, onClose, setState }) {
 function PlayMatch({ setState }) {
 
 	const { getSocket, closeSocket, messages } = useGame()
-	const { setUrl } = useGame()
 	const { setMessages, setPongMessages, setScoreMessages } = useGame()
 	const { NotifMessages } = useNotification()
 	const { user } = useAuth()
@@ -62,38 +61,41 @@ function PlayMatch({ setState }) {
 	const [winner, setWinner] = useState("")
 	const [timer, setTimer] = useState(60)
 	const [showTimer, setShowTimer] = useState(true)
-	const [final, setFinal] = useState(false)
 	const socket = getSocket()
 
 	useEffect(() => {
 		if (!messages.length) return
 		const lastMessage = messages[messages.length - 1]
-		console.log(lastMessage)
 
 		const startFinal = async () => {
 			try {
-				const id = await axiosInstance.get(`/pong/tournament/get-id/`)
-				console.log(id)
-				const response = await axiosInstance.put(`/pong/tournament/${id.data.tournament_id}/start-final/`)
-				console.log(response)
-				setFinal(true)
+				let final
+				const idData = await axiosInstance.get("/pong/tournament/get-id/")
+				if (idData && idData.data.finalist1 != null && idData.data.finalist2 != null) {
+					final = await axiosInstance.put(`/pong/tournament/${idData.data.tournament_id}/start-final/`)
+					await axiosInstance.post("/live_chat/general/send/", {content: `It's time for final : ${idData.data.finalist1} vs ${idData.data.finalist2}`})
+				}
 			}
-			catch(error) {
-				console.log(error)
-			}
+			catch {}
 		}
 
 		const handleMessage = async () => {
-			if (lastMessage.type == "match_ended") {
+			if (lastMessage.type == "match_ended" || lastMessage.type == "forfeit_success") {
 				closeSocket()
-				setWinner(lastMessage.winner)
+				if (lastMessage.type == "match_ended") {
+					setWinner(lastMessage.winner)
+					if (lastMessage.winner == user.name)
+						await startFinal()
+				}
+				else {
+					setWinner(user.name)
+					await startFinal()
+				}
 				setPaused(false)
 				setEnd(true)
 				setMessages([])
 				setPongMessages([])
 				setScoreMessages([])
-				if (lastMessage.match_number == 2 && lastMessage.winner == user.name && final == false)
-					await startFinal()
 			}
 			if (lastMessage.type == "game_paused")
 				setPaused(true)
@@ -106,34 +108,26 @@ function PlayMatch({ setState }) {
 			if (lastMessage.type == "player_count" && lastMessage.player_count == 2) {
 				setPaused(false)
 				setShowTimer(true)
+				setTimer(60)
 			}
 		}
 		handleMessage()
 	}, [messages])
 
 	useEffect(() => {
-		if (NotifMessages.type == "match_created") {
-			setFinal(true)
-			console.log(NotifMessages)
-		}
-	}, [NotifMessages])
-
-	useEffect(() => {
-		if (paused == false || showTimer == false || !socket || socket.readyState != WebSocket.OPEN) return
-
+	if (paused === false || showTimer === false || !socket || socket.readyState !== WebSocket.OPEN) return;
 		const interval = setInterval(() => {
-			socket.send(JSON.stringify({ action: "declare_win" }))
+			setTimer((prevTimer) => {
+				if (prevTimer <= 1) {
+					socket.send(JSON.stringify({ action: "declare_win" }))
+					clearInterval(interval)
+					return 0
+				}
+				return prevTimer - 1
+			})
 		}, 1000)
-
-		const timeout = setTimeout(() => {
-			clearInterval(interval)
-		}, 90000)
-
-		return () => {
-			clearInterval(interval)
-			clearTimeout(timeout)
-		}
-	}, [paused])
+		return () => clearInterval(interval)
+	}, [paused, showTimer, socket])
 
 	return (
 		<>

@@ -4,6 +4,7 @@ import time
 from datetime import datetime, timedelta
 import os
 
+from autobahn.exception import Disconnected
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from core.pong import game_pong
@@ -144,6 +145,7 @@ class PongConsumer(AsyncWebsocketConsumer):
     task_locks = {} # Verrous pour la création des tâches par match_id
     disconnection_times = {}
     c_key_states = {}
+    c_match_winner = {}  # Gagnant du match par match_id
 
     FORFEIT_DELAY = 60
 
@@ -233,8 +235,7 @@ class PongConsumer(AsyncWebsocketConsumer):
             {
                 "type": "game_ended",
                 "game_id": game.id,
-                "winner_name": winner_name,
-                "winner_id": winner_playerid,
+                "winner": winner_name,
                 "scorePlayer1": self.c_scorep1[self.match_id],
                 "scorePlayer2": self.c_scorep2[self.match_id]
             }
@@ -267,10 +268,8 @@ class PongConsumer(AsyncWebsocketConsumer):
             match_result = await self.end_match(self.match)
             match_ended_event = {
                 "type": "match_ended",
-                "winner": match_result.get("winner"),
-                "player_1_wins": match_result.get("player_1_wins"),
-                "player_2_wins": match_result.get("player_2_wins"),
-				"match_number": match_result.get("match_number"),
+                "winner": match_result.get("winner", None),
+				"match_number": match_result.get("match_number", 0),
             }
             await self.channel_layer.group_send(self.room_group_name, match_ended_event)
             await asyncio.sleep(1)
@@ -353,16 +352,17 @@ class PongConsumer(AsyncWebsocketConsumer):
             player_2_wins = wins.get(match.player_2_id, 0)
             if player_1_wins > player_2_wins:
                 match.winner = match.player_1
+                winner_name = match.player_1.name
             elif player_2_wins > player_1_wins:
                 match.winner = match.player_2
+                winner_name = match.player_2.name
             match.save()
 
+            self.c_match_winner[self.match_id] = winner_name
             # Retourner les données, pas un événement
             return {
                 "winner": match.winner.name if match.winner else None,
-                "player_1_wins": player_1_wins,
-                "player_2_wins": player_2_wins,
-				"match_number": match.match_number,
+				"match_number": match.match_number if match else 0,
             }
         except Exception as e:
             print(f"Error ending match {self.match_id}: {str(e)}")
@@ -517,6 +517,8 @@ class PongConsumer(AsyncWebsocketConsumer):
                         del self.c_status[self.match_id]
                         del self.c_game_wins[self.match_id]
                         del self.c_current_game_id[self.match_id]
+                        if self.match_id in self.c_match_winner:
+                            del self.c_match_winner[self.match_id]
 
 
     @database_sync_to_async
@@ -582,46 +584,67 @@ class PongConsumer(AsyncWebsocketConsumer):
 
     async def player_count_update(self, event):
         """Envoie le nombre de joueurs connectés aux clients."""
-        await self.send(text_data=json.dumps({
-            "type": "player_count",
-            "player_count": event["player_count"]
-        }))
+        try:
+            await self.send(text_data=json.dumps({
+                "type": "player_count",
+                "player_count": event["player_count"]
+            }))
+        except Disconnected:
+            print("Connexion WebSocket fermée, player_count_update non envoyé.")
+            await self.close()
 
     async def game_update(self, event):
         """Envoie les mises à jour du jeu aux clients."""
-        await self.send(text_data=json.dumps({
-            "type": "data_pong",
-            "x": event["x"],
-            "y": event["y"],
-            "paddleL": event["paddleL"],
-            "paddleR": event["paddleR"],
-            "scorePlayer1": event["scorePlayer1"],
-            "scorePlayer2": event["scorePlayer2"],
-        }))
+        try:
+            await self.send(text_data=json.dumps({
+                "type": "data_pong",
+                "x": event["x"],
+                "y": event["y"],
+                "paddleL": event["paddleL"],
+                "paddleR": event["paddleR"],
+                "scorePlayer1": event["scorePlayer1"],
+                "scorePlayer2": event["scorePlayer2"],
+            }))
+        except Disconnected:
+            print("Connexion WebSocket fermée, game_update non envoyé.")
+            await self.close()
 
     async def game_paused(self, event):
         """Informe les clients que le jeu est en pause."""
-        await self.send(text_data=json.dumps({
-            "type": "game_paused",
-            "message": event["message"]
-        }))
+        try:
+            await self.send(text_data=json.dumps({
+                "type": "game_paused",
+                "message": event["message"]
+            }))
+        except Disconnected:
+            print("Connexion WebSocket fermée, game_paused non envoyé.")
+            await self.close()
 
     async def score_update(self, event):
-        """Informe les clients que le score est mise a jour."""
-        await self.send(text_data=json.dumps({
-            "type": "score_update",
-            "scorePlayer1": event["score_Player_1"],
-            "scorePlayer2":event["score_Player_2"],
-        }))
-        
+        """Informe les clients que le score est mis à jour."""
+        try:
+            await self.send(text_data=json.dumps({
+                "type": "score_update",
+                "scorePlayer1": event["score_Player_1"],
+                "scorePlayer2": event["score_Player_2"],
+            }))
+        except Disconnected:
+            print("Connexion WebSocket fermée, score_update non envoyé.")
+            await self.close()
+
     async def game_resumed(self, event):
         """Informe les clients que le jeu reprend."""
-        await self.send(text_data=json.dumps({
-            "type": "game_resumed",
-            "message": event["message"]
-        }))
+        try:
+            await self.send(text_data=json.dumps({
+                "type": "game_resumed",
+                "message": event["message"]
+            }))
+        except Disconnected:
+            print("Connexion WebSocket fermée, game_resumed non envoyé.")
+            await self.close()
 
     async def game_ended(self, event):
+        """Informe les clients que le jeu est terminé."""
         try:
             await self.send(text_data=json.dumps({
                 "type": "game_ended",
@@ -630,38 +653,55 @@ class PongConsumer(AsyncWebsocketConsumer):
                 "scorePlayer1": event["scorePlayer1"],
                 "scorePlayer2": event["scorePlayer2"]
             }))
-        except Exception as e:
-            print(f"Failed to send game_ended event to client: {str(e)}")
+        except Disconnected:
+            print("Connexion WebSocket fermée, game_ended non envoyé.")
+            await self.close()
 
     async def new_game(self, event):
         """Informe les clients qu'une nouvelle partie commence."""
-        await self.send(text_data=json.dumps({
-            "type": "new_game",
-            "game_id": event["game_id"],
-            "round_number": event["round_number"],
-            "x": event["x"],
-            "y": event["y"],
-			"ws_url": event["ws_url"],
-            "paddleL": event["paddleL"],
-            "paddleR": event["paddleR"],
-            "scorePlayer1": event["scorePlayer1"],
-            "scorePlayer2": event["scorePlayer2"]
-        }))
+        try:
+            await self.send(text_data=json.dumps({
+                "type": "new_game",
+                "game_id": event["game_id"],
+                "round_number": event["round_number"],
+                "x": event["x"],
+                "y": event["y"],
+                "ws_url": event["ws_url"],
+                "paddleL": event["paddleL"],
+                "paddleR": event["paddleR"],
+                "scorePlayer1": event["scorePlayer1"],
+                "scorePlayer2": event["scorePlayer2"]
+            }))
+        except Disconnected:
+            print("Connexion WebSocket fermée, new_game non envoyé.")
+            await self.close()
 
     async def match_ended(self, event):
         """Informe les clients que le match est terminé."""
-        await self.send(text_data=json.dumps({
-            "type": "match_ended",
-            "winner": event["winner"],
-            "match_number": event["match_number"],
-            "player_1_wins": event["player_1_wins"],
-            "player_2_wins": event["player_2_wins"],
-        }))
+        try:
+            await self.send(text_data=json.dumps({
+                "type": "match_ended",
+                "winner": event["winner"],
+                "match_number": event["match_number"],
+            }))
+        except Disconnected:
+            print("Connexion WebSocket fermée, match_ended non envoyé.")
+            await self.close()
 
     async def handle_match_end(self):
         try:
             # Envoyer un message de fin de match
-            await self.send(text_data=json.dumps({"type": "game_over", "message": "Match terminé"}))
+            if self.match is not None and self.match.status == StatusChoices.TERMINE:
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        "type": "match_ended",
+                        "winner": self.c_match_winner.get(self.match_id, None),
+                        "match_number": self.match.match_number if self.match else 0,
+                    }
+                )
+                await asyncio.sleep(5)
+                await self.close()
             
             # Vérifier si un événement match_ended doit être envoyé
             if self.match_id in self.c_game_wins:
@@ -670,18 +710,15 @@ class PongConsumer(AsyncWebsocketConsumer):
                     self.room_group_name,
                     {
                         "type": "match_ended",
-                        "winner": match_result.get("winner"),
-                        "player_1_wins": match_result.get("player_1_wins"),
-                        "player_2_wins": match_result.get("player_2_wins"),
-						"match_number": match_result.get("match_number"),
+                        "winner": match_result.get("winner", None),
+						"match_number": match_result.get("match_number", 0),
                     }
                 )
-                # Attendre que les messages soient propagés
-                await asyncio.sleep(1)
         except Exception as e:
             print(f"Error in handle_match_end: {str(e)}")
         finally:
             # Fermer la connexion après avoir envoyé tous les messages
+            await asyncio.sleep(5)
             await self.close()
 
     async def handle_forfeit(self, winner_id):
@@ -730,11 +767,8 @@ class PongConsumer(AsyncWebsocketConsumer):
                 match_result = await self.end_match_forfeit(self.match, winner_id)
                 match_ended_event = {
                     "type": "match_ended",
-                    "winner": match_result.get("winner"),
-                    "player_1_wins": match_result.get("player_1_wins"),
-                    "player_2_wins": match_result.get("player_2_wins"),
-                    "forfeit": True,
-					"match_number": match_result.get("match_number"),
+                    "winner": match_result.get("winner", None),
+					"match_number": match_result.get("match_number", 0),
                 }
                 await self.channel_layer.group_send(self.room_group_name, match_ended_event)
                 
@@ -766,10 +800,12 @@ class PongConsumer(AsyncWebsocketConsumer):
                 # Mettre à jour le gagnant pour le match
                 if winner_id == match.player_1_id:
                     match.winner = match.player_1
+                    winner_name = match.player_1.name
                     player_1_wins = match.number_of_rounds
                     player_2_wins = 0
                 else:
                     match.winner = match.player_2
+                    winner_name = match.player_2.name
                     player_1_wins = 0
                     player_2_wins = match.number_of_rounds
             
@@ -777,11 +813,11 @@ class PongConsumer(AsyncWebsocketConsumer):
             match.forfeit = True
             match.save()
 
+            self.c_match_winner[self.match_id] = winner_name
+
             return {
                 "winner": match.winner.name if match.winner else None,
-                "player_1_wins": player_1_wins,
-                "player_2_wins": player_2_wins,
-				"match_number": match.match_number,
+				"match_number": match.match_number if match else 0,
             }
         except Exception as e:
             print(f"Error ending match by forfeit {self.match_id}: {str(e)}")
@@ -833,8 +869,37 @@ class PongConsumer(AsyncWebsocketConsumer):
         action = text_data_json.get('action')
         move = text_data_json.get('type')
 
+        # Vérifier l'état actuel du match en base de données
+        current_match = await self.get_match(self.match_id)
+        if current_match and current_match.status == StatusChoices.TERMINE:
+            # Le match est terminé, envoyer l'événement complet et fermer
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    "type": "match_ended",
+                    "winner": self.c_match_winner.get(self.match_id, None),
+					"match_number": 0,
+                }
+            )
+            await asyncio.sleep(2)  # Réduit le délai
+            await self.close()
+            return
         # Gérer l'action de forfait avec vérification du délai
         if action == 'declare_win':
+            # Vérifier que la partie existe toujours
+            if not self.game:
+                # Tenter de récupérer la partie active
+                self.game = await self.get_active_game(self.match_id)
+                if not self.game:
+                    await self.channel_layer.group_send(
+                        self.room_group_name,
+                        {
+                            "type": "match_ended",
+                            "winner": self.c_match_winner.get(self.match_id, None),
+                            "match_number": None,
+                        }
+                    )
+                    return
             # Vérifier que le joueur qui demande est bien connecté
             if self.player_id not in self.c_players.get(self.match_id, set()):
                 await self.send(text_data=json.dumps({

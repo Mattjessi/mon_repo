@@ -18,13 +18,19 @@ function ProfileEdit({user, show, setShow, code, setCode}) {
 
 	const fileInputRef = useRef(null)
 
-	const updateInfo = async () => {
+	const updateInfo = async (string) => {
 
 		try {
 			const formData = new FormData()
 			if (text)
 				formData.append('description', text)
-			if (file)
+			if (string == "reset") {
+				const response = await fetch("/default.jpg")
+				const blob = await response.blob()
+				const defaultFile = new File([blob], "default.jpg", { type: blob.type })
+				formData.append("avatar", defaultFile)
+			}
+			else if (file)
 				formData.append('avatar', file)
 			const response = await axiosInstance.put('/users/api/player/update-info/', formData)
 			if (response.data.code == 1000) {
@@ -33,7 +39,6 @@ function ProfileEdit({user, show, setShow, code, setCode}) {
 			}
 		}
 		catch(error) {
-			console.log(error)
 			setFile(null)
 			setPreview(null)
 			setCode(error.response.data.code)
@@ -69,8 +74,11 @@ function ProfileEdit({user, show, setShow, code, setCode}) {
                     <Form.Control type="text" value={text} onChange={(e) => setText(e.target.value)} id="formText" />
                 </Form.Group>
             </Form>
-            <Button className="rounded-0 btn btn-dark fw-bolder" onClick={() => updateInfo()}>
+            <Button className="rounded-0 btn btn-dark fw-bolder" onClick={() => updateInfo("")}>
                 <i className="bi bi-pencil" style={{ fontSize: "20px" }} />
+            </Button>
+			<Button className="rounded-0 btn btn-dark fw-bolder" onClick={() => updateInfo("reset")}>
+                Reset Avatar
             </Button>
 			<ErrorModal show={ show } hideModal={ hideModal } contextId={ 2 } code={ code } />
 		</>

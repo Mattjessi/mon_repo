@@ -60,7 +60,17 @@ class Game(models.Model):
     ball_radius = models.PositiveIntegerField(default=1)
 
     def initialize_ball_direction(self):
-        self.ball_dx = random.choice([1, -1])
+        # Comparer les scores pour déterminer le joueur avec le moins de points
+        if self.score_player_1 < self.score_player_2:
+            # Player 1 a moins de points (perdant), balle va vers la gauche
+            self.ball_dx = -1
+        elif self.score_player_2 < self.score_player_1:
+            # Player 2 a moins de points (perdant), balle va vers la droite
+            self.ball_dx = 1
+        else:
+            # Égalité, direction horizontale aléatoire
+            self.ball_dx = random.choice([1, -1])
+        # Direction verticale aléatoire
         self.ball_dy = random.choice([1, -1, 0])
         self.save()
 

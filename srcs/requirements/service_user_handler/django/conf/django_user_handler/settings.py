@@ -26,11 +26,11 @@ vault_secrets = get_vault_secrets()
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = vault_secrets['django_secret_key']
-DOMAIN_NAME = os.getenv('DOMAIN_NAME', 'localhost')
-PORT_NUM = os.getenv('PORT_NUM', '4343')
-SOCIAL_AUTH_42_KEY = os.getenv('AUTH_42_KEY')
-SOCIAL_AUTH_42_SECRET = os.getenv('AUTH_42_SECRET')
-SOCIAL_AUTH_REDIRECT_URI = f"https://{DOMAIN_NAME}:{PORT_NUM}/users/api/auth-42/callback/"
+DOMAIN_NAME = os.getenv("DOMAIN_NAME", "localhost")
+PORT_NUM = os.getenv("PORT_NUM", "4343")
+SOCIAL_AUTH_42_KEY = vault_secrets['auth_42_key']
+SOCIAL_AUTH_42_SECRET = vault_secrets['auth_42_secret']
+SOCIAL_AUTH_REDIRECT_URI = f"https://{DOMAIN_NAME}:{PORT_NUM}/register/42/complete"
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
@@ -38,64 +38,60 @@ DEBUG = False
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
     # Apps tierces
-    'rest_framework',
-    'corsheaders',
-    'rest_framework_simplejwt',
-    'rest_framework_simplejwt.token_blacklist',
-    'django_otp',
-    'django_otp.plugins.otp_totp',
-    'social_django',
-
+    "rest_framework",
+    "corsheaders",
+    "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
+    "social_django",
     # App locale
-    'core',
-    'shared_models',
+    "core",
+    "shared_models",
 ]
 
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'core.middleware.UserActivityMiddleware',
-    'core.middleware.SetUserOnlineMiddleware',
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.middleware.UserActivityMiddleware",
+    "core.middleware.SetUserOnlineMiddleware",
 ]
 
-ROOT_URLCONF = 'django_user_handler.urls'
+ROOT_URLCONF = "django_user_handler.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-AUTHENTICATION_BACKENDS = (
-    'django.contrib.auth.backends.ModelBackend',
-)
+AUTHENTICATION_BACKENDS = ("django.contrib.auth.backends.ModelBackend",)
 
-WSGI_APPLICATION = 'django_user_handler.wsgi.application'
+WSGI_APPLICATION = "django_user_handler.wsgi.application"
 
 CORS_ALLOWED_ORIGINS = [
     f"https://{DOMAIN_NAME}:{PORT_NUM}",
@@ -109,47 +105,47 @@ CSRF_TRUSTED_ORIGINS = [
 ALLOWED_HOSTS = [DOMAIN_NAME]
 
 MEDIA_URL = f"https://{DOMAIN_NAME}:{PORT_NUM}/media/"
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = BASE_DIR / "media"
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = False  # À désactiver en production
 CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-requested-with',
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-requested-with",
 ]
 
 # Autoriser les méthodes HTTP
 CORS_ALLOW_METHODS = [
-    'DELETE',
-    'GET',
-    'OPTIONS',
-    'PATCH',
-    'POST',
-    'PUT',
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
 ]
 
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [ 
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
     ],
-    'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
+    "EXCEPTION_HANDLER": "core.exceptions.custom_exception_handler",
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),  # Durée de vie de l’access token
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),    # Durée de vie du refresh token
-    'BLACKLIST_AFTER_ROTATION': True,               # Active le blacklisting après rotation
-    'TOKEN_BACKEND': 'rest_framework_simplejwt.token_blacklist.backends.BlacklistBackend',  # Backend pour blacklist
+    "ACCESS_TOKEN_LIFETIME": timedelta(seconds=10),  # Durée de vie de l’access token
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),  # Durée de vie du refresh token
+    "BLACKLIST_AFTER_ROTATION": True,  # Active le blacklisting après rotation
+    "TOKEN_BACKEND": "rest_framework_simplejwt.token_blacklist.backends.BlacklistBackend",  # Backend pour blacklist
 }
 
 # Database
@@ -174,16 +170,16 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
@@ -191,9 +187,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/4.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = "UTC"
 
 USE_I18N = True
 
@@ -203,21 +199,23 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.1/howto/static-files/
 
-STATIC_URL = '/static/users/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATIC_URL = "/static/users/"
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
-LOGIN_REDIRECT_URL = '/'
-LOGOUT_REDIRECT_URL = '/users/admin/'
-LOGIN_URL = '/login'
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/users/admin/"
+LOGIN_URL = "/login"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-SESSION_ENGINE = 'django.contrib.sessions.backends.db' #stocker les sessions utilisateur
+SESSION_ENGINE = (
+    "django.contrib.sessions.backends.db"  # stocker les sessions utilisateur
+)
 
 SESSION_COOKIE_SECURE = True  # HTTPS uniquement (activé en production)
 SESSION_COOKIE_HTTPONLY = True  # Empêche l'accès JavaScript
-SESSION_COOKIE_SAMESITE = 'Lax'  # Protection CSRF
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True # Expirer à la fermeture du navigateur
+SESSION_COOKIE_SAMESITE = "Lax"  # Protection CSRF
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True  # Expirer à la fermeture du navigateur

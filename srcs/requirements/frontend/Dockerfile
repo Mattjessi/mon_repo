@@ -22,4 +22,4 @@ RUN npm install \
 	&& npm install serve@14.2.4 \
 	&& npm run build
 
-CMD ["npx", "serve", "-s", "/home/frontend/dist", "-p", "3000"]
+CMD ["sh", "-c", "npx serve -s /home/frontend/dist -p 3000"]

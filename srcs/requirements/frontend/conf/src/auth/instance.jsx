@@ -23,21 +23,24 @@ export const refreshAtoken = async (Rtoken) => {
 		try {
 			const response = await rawAxios.post('/users/api/token/refresh/', { refresh: Rtoken })
 			if (response.data.access) {
-				console.log("Token is refreshed")
 				localStorage.setItem('Atoken', response.data.access)
 				return true
 			}
 			return false
 		}
-		catch (error) {
-			console.error('Error refreshing token:', error)
-			return false
-		}
-		finally {
-			isRefreshing = false
-		}
+		catch (error) {return false}
+		finally {isRefreshing = false}
 	})()
 	return refreshPromise
+}
+
+const checkAPI = async (url) => {
+	try {
+		const containerStatus = await rawAxios.get(`/${url}/api/status/`)
+		if (containerStatus.data.code != 1000) return false
+		return true
+	}
+	catch {return false}
 }
 
 axiosInstance.interceptors.request.use(async (config) => {
@@ -51,6 +54,9 @@ axiosInstance.interceptors.request.use(async (config) => {
 
 	if (isAuthAPI)
 		return config
+	if (config.url && config.url.includes("/users/") && !(await checkAPI("users"))) throw new axios.Cancel()
+	if (config.url && config.url.includes("/live_chat/") && !(await checkAPI("live_chat"))) throw new axios.Cancel()
+	if (config.url && config.url.includes("/pong/") && !(await checkAPI("pong"))) throw new axios.Cancel()
 	if (!Rtoken) {
 		window.location.reload()
 		return config
@@ -73,7 +79,6 @@ axiosInstance.interceptors.request.use(async (config) => {
 	}
 
 	if (istokenExpired(Atoken)) {
-		console.log("Access token expired, attempting refresh.")
 		const success = await refreshAtoken(Rtoken)
 		if (!success) {
 			removeData()

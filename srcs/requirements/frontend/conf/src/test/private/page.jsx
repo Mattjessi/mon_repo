@@ -13,7 +13,7 @@ const BGprivate = ({ state, type }) => {
 
 	useEffect(() => {
 		if (!canva.current) return
-		if (state != "play") canva.current.style.filter = 'blur(5px)'
+		if (state != "play" && state != "playfinal") canva.current.style.filter = 'blur(5px)'
 		else canva.current.style.filter = ""
 		const handleKeyDown = (e) => {
 			const socket = getSocket()

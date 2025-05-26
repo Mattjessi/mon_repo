@@ -42,7 +42,7 @@ RUN git clone https://github.com/owasp-modsecurity/ModSecurity.git \
 	&& cd /usr/local/coreruleset \
 	&& cp crs-setup.conf.example crs-setup.conf \
 	&& cd /etc/nginx/modsec \
-	&& sed -i "s/SecAuditEngine RelevantOnly/SecAuditEngine off/" modsecurity.conf
+	&& sed -i "s/SecAuditEngine RelevantOnly/SecAuditEngine on/" modsecurity.conf
 
 WORKDIR /etc/nginx/modsec
 COPY --chown=root:root ./conf/main.conf ./main.conf
@@ -56,6 +56,8 @@ COPY --chown=root:root ./conf/transcendence_fr.conf ./transcendence_fr.conf
 
 COPY --chown=root:root ./tools/init_nginx.sh /tmp/init_nginx.sh
 RUN chmod +x /tmp/init_nginx.sh
+
+COPY ./conf/static_error.html /usr/share/nginx/html/static_error.html
 
 EXPOSE 443
 

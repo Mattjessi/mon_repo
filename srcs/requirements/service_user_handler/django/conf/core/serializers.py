@@ -109,12 +109,22 @@ class PlayerRegisterSerializer(serializers.Serializer):
     def validate(self, data):
         if not data.get('username'):
             raise serializers.ValidationError({"code": 1009}) # Nom d'utilisateur requis.
+        
+        username = data['username']
+        if len(username) > 20:
+            raise serializers.ValidationError({"code": 1011}) # Le nom d'utilisateur ne doit pas dépasser 20 caractères.
+        if ' ' in username:
+            raise serializers.ValidationError({"code": 1012}) # Le nom d'utilisateur ne doit pas contenir d'espaces.
+        if not re.match(r'^[a-zA-Z0-9]+$', username):
+            raise serializers.ValidationError({"code": 1013}) # Le nom d'utilisateur ne doit contenir que des lettres et des chiffres.
+        
         if not data.get('password') or not data.get('password2'):
             raise serializers.ValidationError({"code": 1010}) # Mot de passe requis.
         if data['password'] != data['password2']:
             raise serializers.ValidationError({"code": 1001})  # Les mots de passe ne correspondent pas.
         if Player.objects.filter(name=data['username']).exists():
             raise serializers.ValidationError({"code": 1002})  # Ce nom d'utilisateur est déjà pris.
+        
         validate_strong_password(data['password'])
         return data
 
@@ -173,7 +183,7 @@ class PlayerUpdateInfoSerializer(serializers.ModelSerializer):
                 img = Image.open(avatar)  # Ré-ouvrir pour traitement
 
                 # Vérification des dimensions
-                max_dimensions = (500, 500)
+                max_dimensions = (550, 550)
                 if img.width > max_dimensions[0] or img.height > max_dimensions[1]:
                     raise serializers.ValidationError({"code": 1034, "message": "Image dimensions exceed 500x500"})
 
@@ -228,8 +238,17 @@ class PlayerUpdateNameSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         if not check_password(data['current_password'], user.password):
             raise serializers.ValidationError({"code": 1008})  # Mot de passe incorrect.
-        if Player.objects.filter(name=data['name']).exists():
+        
+        username = data['name']
+        if Player.objects.filter(username).exists():
             raise serializers.ValidationError({"code": 1002}) #Ce nom d'utilisateur est déjà pris.
+        if len(username) > 20:
+            raise serializers.ValidationError({"code": 1011}) # Le nom d'utilisateur ne doit pas dépasser 20 caractères.
+        if ' ' in username:
+            raise serializers.ValidationError({"code": 1012}) # Le nom d'utilisateur ne doit pas contenir d'espaces.
+        if not re.match(r'^[a-zA-Z0-9]+$', username):
+            raise serializers.ValidationError({"code": 1013}) # Le nom d'utilisateur ne doit contenir que des lettres et des chiffres.
+        
         return data
 
     def update(self, instance, validated_data):

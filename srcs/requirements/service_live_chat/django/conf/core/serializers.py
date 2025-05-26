@@ -58,20 +58,6 @@ class PrivateMessageSerializer(serializers.ModelSerializer):
         except Player.DoesNotExist:
             raise serializers.ValidationError({"code": 2004})  # Joueur destinataire non trouvé
 
-        # Vérifier si le sender et le receiver sont amis (Friendship avec status='accepted')
-        friendship_exists = Friendship.objects.filter(
-            status='accepted',
-            player_1=sender_player,
-            player_2=receiver_player
-        ).exists() or Friendship.objects.filter(
-            status='accepted',
-            player_1=receiver_player,
-            player_2=sender_player
-        ).exists()
-
-        if not friendship_exists:
-            raise serializers.ValidationError({"code": 2005})  # Vous ne pouvez envoyer des messages qu'à vos amis
-
         # Vérifier si le sender et le receiver sont bloqués
         if Block.objects.filter(blocker=sender_player, blocked=receiver_player).exists():
             raise serializers.ValidationError({"code": 2006})  # Vous ne pouvez pas envoyer de message à un utilisateur que vous avez bloqué
